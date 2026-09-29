@@ -1,8 +1,8 @@
 import os
 import sys
 from pathlib import Path
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl
-from PyQt6.QtGui import QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl, QPoint
+from PyQt6.QtGui import QIcon, QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QSizePolicy,
     QLayout,
+    QMenu,
 )
 from wallhaven.api import WallpaperItem, SearchResult, api
 from wallhaven.osu import osu_manager
@@ -33,8 +34,12 @@ from wallhaven.widgets.color_bar import ColorBar
 from wallhaven.widgets.detail_dialog import DetailDialog, DownloadWorker
 from wallhaven.widgets.settings_dialog import SettingsDialog
 from wallhaven.widgets.pfp_detail_dialog import PfpDetailDialog
+from wallhaven.widgets.animated_nav import AnimatedCapsuleBar
+from wallhaven.widgets.smooth_scroll import SmoothScrollArea
+from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
+from wallhaven.styles import get_available_themes, apply_theme
 
 
 class SearchWorker(QThread):
@@ -170,55 +175,17 @@ class MainWindow(QMainWindow):
         h_layout.addLayout(brand_layout)
         h_layout.addSpacing(4)
 
-        # Navigation Mode Tabs inside a capsule container
-        tabs_container = QFrame()
-        tabs_container.setObjectName("tabsContainer")
-        tabs_layout = QHBoxLayout(tabs_container)
-        tabs_layout.setContentsMargins(3, 3, 3, 3)
-        tabs_layout.setSpacing(3)
-        tabs_layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+        # Navigation Mode Tabs inside an animated capsule container
+        self.nav_capsule = AnimatedCapsuleBar(self)
+        self.nav_capsule.mode_changed.connect(self._set_mode)
+        h_layout.addWidget(self.nav_capsule)
 
-        self.tab_wallhaven = QPushButton()
-        self.tab_wallhaven.setObjectName("navTab")
-        self.tab_wallhaven.setCheckable(True)
-        self.tab_wallhaven.setChecked(True)
-        self.tab_wallhaven.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_wallhaven.clicked.connect(lambda: self._set_mode("wallhaven"))
-        tabs_layout.addWidget(self.tab_wallhaven)
-
-        self.tab_moewalls = QPushButton()
-        self.tab_moewalls.setObjectName("navTab")
-        self.tab_moewalls.setCheckable(True)
-        self.tab_moewalls.setChecked(False)
-        self.tab_moewalls.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_moewalls.clicked.connect(lambda: self._set_mode("moewalls"))
-        tabs_layout.addWidget(self.tab_moewalls)
-
-        self.tab_osu = QPushButton()
-        self.tab_osu.setObjectName("navTab")
-        self.tab_osu.setCheckable(True)
-        self.tab_osu.setChecked(False)
-        self.tab_osu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_osu.clicked.connect(lambda: self._set_mode("osu"))
-        tabs_layout.addWidget(self.tab_osu)
-
-        self.tab_pfps = QPushButton()
-        self.tab_pfps.setObjectName("navTab")
-        self.tab_pfps.setCheckable(True)
-        self.tab_pfps.setChecked(False)
-        self.tab_pfps.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_pfps.clicked.connect(lambda: self._set_mode("pfps"))
-        tabs_layout.addWidget(self.tab_pfps)
-
-        self.tab_installed = QPushButton()
-        self.tab_installed.setObjectName("navTab")
-        self.tab_installed.setCheckable(True)
-        self.tab_installed.setChecked(False)
-        self.tab_installed.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tab_installed.clicked.connect(lambda: self._set_mode("installed"))
-        tabs_layout.addWidget(self.tab_installed)
-
-        h_layout.addWidget(tabs_container)
+        # Compatibility references
+        self.tab_wallhaven = self.nav_capsule.buttons.get("wallhaven")
+        self.tab_moewalls = self.nav_capsule.buttons.get("moewalls")
+        self.tab_osu = self.nav_capsule.buttons.get("osu")
+        self.tab_pfps = self.nav_capsule.buttons.get("pfps")
+        self.tab_installed = self.nav_capsule.buttons.get("installed")
 
         # Search box (prominent and flexible with min width)
         self.search_input = QLineEdit()
@@ -227,6 +194,12 @@ class MainWindow(QMainWindow):
         self.search_input.returnPressed.connect(self._on_search_triggered)
         self.search_input.setClearButtonEnabled(True)
         h_layout.addWidget(self.search_input, stretch=1)
+
+        # Shortcuts to focus search (Ctrl+K or /)
+        self.shortcut_search_k = QShortcut(QKeySequence("Ctrl+K"), self)
+        self.shortcut_search_k.activated.connect(self._focus_search)
+        self.shortcut_search_slash = QShortcut(QKeySequence("/"), self)
+        self.shortcut_search_slash.activated.connect(self._focus_search)
 
         self.search_btn = QPushButton()
         self.search_btn.setObjectName("primaryButton")
@@ -246,6 +219,15 @@ class MainWindow(QMainWindow):
         self.auto_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.auto_wall_btn.clicked.connect(self._on_auto_wall_toggled)
         h_layout.addWidget(self.auto_wall_btn)
+
+        # Quick Theme Palette Button
+        self.theme_picker_btn = QPushButton("🎨")
+        self.theme_picker_btn.setObjectName("headerToolBtn")
+        self.theme_picker_btn.setFixedHeight(34)
+        self.theme_picker_btn.setToolTip("Rychlý výběr barevného motivu (Theme)")
+        self.theme_picker_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_picker_btn.clicked.connect(self._show_quick_theme_menu)
+        h_layout.addWidget(self.theme_picker_btn)
 
         # Settings button
         self.settings_btn = QPushButton()
@@ -589,8 +571,8 @@ class MainWindow(QMainWindow):
         self.color_bar.color_changed.connect(self._on_color_changed)
         main_layout.addWidget(self.color_bar)
 
-        # 4. Scrollable Wallpaper Grid Area
-        self.scroll_area = QScrollArea()
+        # 4. Scrollable Wallpaper Grid Area (Smooth Inertial Scrolling)
+        self.scroll_area = SmoothScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.grid_widget = WallpaperGridWidget()
         self.grid_widget.card_clicked.connect(self._on_card_clicked)
@@ -659,6 +641,9 @@ class MainWindow(QMainWindow):
         # Status Bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+
+        # Modern floating toast notification banner
+        self.toast = KomorebiToast(self)
 
         self.retranslate_ui()
         self.status_bar.showMessage(tr("status_ready"))
@@ -880,6 +865,9 @@ class MainWindow(QMainWindow):
         self.pfps_sort_lbl.setText(tr("pfps_sort_label"))
         self._retranslate_pfps_combos()
 
+        if hasattr(self, "nav_capsule"):
+            self.nav_capsule.retranslate_ui()
+
         # Pagination
         self.first_btn.setText(tr("first_page"))
         self.prev_btn.setText(tr("prev_page"))
@@ -903,20 +891,13 @@ class MainWindow(QMainWindow):
             self.total_count_lbl.setText(tr("total_found", total=f"{self.total_count:,}"))
 
     def _set_mode(self, mode: str):
+        if hasattr(self, "nav_capsule"):
+            self.nav_capsule.set_mode(mode)
+
         if mode == self.current_mode:
-            self.tab_wallhaven.setChecked(mode == "wallhaven")
-            self.tab_moewalls.setChecked(mode == "moewalls")
-            self.tab_osu.setChecked(mode == "osu")
-            self.tab_pfps.setChecked(mode == "pfps")
-            self.tab_installed.setChecked(mode == "installed")
             return
 
         self.current_mode = mode
-        self.tab_wallhaven.setChecked(mode == "wallhaven")
-        self.tab_moewalls.setChecked(mode == "moewalls")
-        self.tab_osu.setChecked(mode == "osu")
-        self.tab_pfps.setChecked(mode == "pfps")
-        self.tab_installed.setChecked(mode == "installed")
 
         is_wall = (mode == "wallhaven")
         is_moe = (mode == "moewalls")
@@ -1293,10 +1274,16 @@ class MainWindow(QMainWindow):
             )
             if ok:
                 self.status_bar.showMessage(tr("status_download_done_wall", filename=filename), 8000)
+                if hasattr(self, "toast"):
+                    self.toast.show_message(f"Tapeta nastavena na plochu: {filename}", icon="🖼️")
             else:
                 self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
+                if hasattr(self, "toast"):
+                    self.toast.show_message(f"Tapeta uložena: {filename}", icon="💾")
         else:
             self.status_bar.showMessage(tr("status_download_done", filename=filename), 8000)
+            if hasattr(self, "toast"):
+                self.toast.show_message(f"Tapeta uložena: {filename}", icon="💾")
 
     def _open_installed_folder(self):
         folder = config.default_download_dir
@@ -1322,6 +1309,8 @@ class MainWindow(QMainWindow):
             ok, err = installed_manager.uninstall_wallpaper(item)
             if ok:
                 self.status_bar.showMessage(tr("status_uninstalled", title=title), 6000)
+                if hasattr(self, "toast"):
+                    self.toast.show_message(f"Tapeta odinstalována: {title}", icon="🗑️")
                 self.perform_search(page=self.current_page)
             else:
                 QMessageBox.critical(self, tr("uninstall_error_title"), tr("uninstall_error_msg", error=err))
@@ -1341,6 +1330,8 @@ class MainWindow(QMainWindow):
         filename = os.path.basename(target_path)
         if ok:
             self.status_bar.showMessage(tr("status_download_done_wall", filename=filename), 8000)
+            if hasattr(self, "toast"):
+                self.toast.show_message(f"Tapeta nastavena: {filename}", icon="🖼️")
         else:
             self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
 
@@ -1359,6 +1350,8 @@ class MainWindow(QMainWindow):
                 f"Profilovka uložena do {res}" if is_cs else f"Avatar saved to {res}",
                 8000,
             )
+            if hasattr(self, "toast"):
+                self.toast.show_message(f"Profilovka uložena do: {os.path.basename(res)}", icon="💾")
         else:
             QMessageBox.critical(
                 self,
@@ -1374,6 +1367,8 @@ class MainWindow(QMainWindow):
         ok, msg = pfps_client.set_system_avatar(item)
         if ok:
             self.status_bar.showMessage(f"✓ {msg}", 8000)
+            if hasattr(self, "toast"):
+                self.toast.show_message("Profilovka byla úspěšně nastavena do systému!", icon="👤")
             QMessageBox.information(
                 self,
                 "Profilovka nastavena" if is_cs else "Avatar Set",
@@ -1394,3 +1389,56 @@ class MainWindow(QMainWindow):
             else f"✓ Avatar '{item.title}' copied to clipboard (paste with Ctrl+V)",
             6000,
         )
+        if hasattr(self, "toast"):
+            self.toast.show_message(f"Profilovka '{item.title}' zkopírována do schránky (Ctrl+V)", icon="📋")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "toast") and self.toast.isVisible():
+            pw = self.width()
+            tw = self.toast.width()
+            th = self.toast.height()
+            self.toast.move((pw - tw) // 2, self.height() - th - 24)
+
+    def _focus_search(self):
+        self.search_input.setFocus()
+        self.search_input.selectAll()
+
+    def _show_quick_theme_menu(self):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #12151f;
+                color: #f8fafc;
+                border: 1px solid #283045;
+                border-radius: 10px;
+                padding: 6px;
+            }
+            QMenu::item {
+                padding: 6px 18px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QMenu::item:selected {
+                background: #6366f1;
+                color: #ffffff;
+            }
+        """)
+        themes = get_available_themes()
+        cur_theme = config.theme
+        for theme_id, display_name in themes:
+            action = menu.addAction(display_name)
+            action.setCheckable(True)
+            action.setChecked(theme_id == cur_theme)
+            action.triggered.connect(lambda chk, tid=theme_id: self._on_quick_theme_selected(tid))
+
+        pos = self.theme_picker_btn.mapToGlobal(QPoint(0, self.theme_picker_btn.height() + 4))
+        menu.exec(pos)
+
+    def _on_quick_theme_selected(self, theme_id: str):
+        config.theme = theme_id
+        config.save()
+        apply_theme(theme_id)
+        if hasattr(self, "toast"):
+            self.toast.show_message(f"Barevný motiv aktivován", icon="🎨", duration_ms=2500)

@@ -874,9 +874,9 @@ QLineEdit {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 12.5px;
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-size: 13px;
     selection-background-color: %(accent)s;
 }
 
@@ -891,9 +891,9 @@ QComboBox {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 8px;
-    padding: 3px 6px;
-    padding-right: 18px;
+    border-radius: 9px;
+    padding: 4px 8px;
+    padding-right: 20px;
     font-size: 11.5px;
     font-weight: 500;
 }
@@ -1146,7 +1146,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 QFrame#wallpaperCard {
     background-color: %(bg_surface)s;
     border: 1.5px solid %(border)s;
-    border-radius: 12px;
+    border-radius: 14px;
 }
 
 QFrame#wallpaperCard:hover {
@@ -1306,6 +1306,14 @@ def get_stylesheet(theme_id: str = "dark") -> str:
     ).replace(
         "__CHEVRON_HOVER__", _CHEVRON_HOVER
     )
+
+
+def apply_theme(theme_id: str = "dark"):
+    """Apply stylesheet for theme to the active QApplication instance."""
+    app = QApplication.instance()
+    if app:
+        qss = get_stylesheet(theme_id)
+        app.setStyleSheet(qss)
 
 
 DARK_STYLESHEET = get_stylesheet("dark")

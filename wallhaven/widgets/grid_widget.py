@@ -1,5 +1,5 @@
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QWidget, QGridLayout, QVBoxLayout, QLabel, QFrame
+from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt6.QtWidgets import QWidget, QGridLayout, QVBoxLayout, QLabel, QFrame, QGraphicsOpacityEffect
 from typing import Any, List
 from wallhaven.api import WallpaperItem
 from wallhaven.pfps import PfpItem
@@ -30,6 +30,9 @@ class WallpaperGridWidget(QWidget):
 
         self.current_cols = 4
 
+    def _trigger_entrance_animation(self):
+        pass
+
     def set_items(self, items: list[WallpaperItem]):
         self.clear()
         self.items = items
@@ -43,6 +46,7 @@ class WallpaperGridWidget(QWidget):
             self.cards.append(card)
 
         self._relayout()
+        self._trigger_entrance_animation()
 
     def set_pfp_items(self, items: list[PfpItem]):
         self.clear()
@@ -57,6 +61,7 @@ class WallpaperGridWidget(QWidget):
             self.cards.append(card)
 
         self._relayout()
+        self._trigger_entrance_animation()
 
     def clear(self):
         for card in self.cards:

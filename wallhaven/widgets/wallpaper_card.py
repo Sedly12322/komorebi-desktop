@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QColor, QPainter, QCursor
 from PyQt6.QtWidgets import (
     QFrame,
@@ -7,10 +7,12 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QGraphicsDropShadowEffect,
 )
 from wallhaven.api import WallpaperItem
 from wallhaven.image_loader import loader
 from wallhaven.i18n import tr
+from wallhaven.widgets.shimmer import ShimmerLabel
 
 
 class WallpaperCard(QFrame):
@@ -34,6 +36,16 @@ class WallpaperCard(QFrame):
         self._pixmap: QPixmap | None = None
         self._thumb_url = self.item.thumb_large or self.item.thumb_small or self.item.path
 
+        # Soft drop shadow with animated hover bloom
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(10)
+        self._shadow.setOffset(0, 3)
+        self._shadow.setColor(QColor(0, 0, 0, 75))
+        self.setGraphicsEffect(self._shadow)
+
+        self._anim_blur: QPropertyAnimation | None = None
+        self._anim_offset: QPropertyAnimation | None = None
+
         self._init_ui()
         self._load_thumbnail()
 
@@ -42,21 +54,9 @@ class WallpaperCard(QFrame):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
-        # 1. Image preview container with placeholder skeleton
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 1. Image preview with animated skeleton shimmer
+        self.image_label = ShimmerLabel(self, corner_radius=9)
         self.image_label.setFixedSize(self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
-        self.image_label.setStyleSheet("""
-            QLabel {
-                background-color: #10121a;
-                border: 1px solid #1c2130;
-                border-radius: 8px;
-                color: #475569;
-                font-size: 13px;
-                font-weight: 500;
-            }
-        """)
-        self.image_label.setText("⏳ " + tr("card_loading"))
         layout.addWidget(self.image_label)
 
         # 2. Bottom info row
@@ -254,9 +254,40 @@ class WallpaperCard(QFrame):
     def _set_pixmap_instant(self, pixmap: QPixmap):
         """Called directly when pre-scaled rounded pixmap is ready."""
         self._pixmap = pixmap
-        self.image_label.setStyleSheet("QLabel { background-color: transparent; border: none; }")
-        self.image_label.setPixmap(pixmap)
-        self.image_label.setText("")
+        self.image_label.set_loaded_pixmap(pixmap, animate=True)
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        # Animate drop shadow bloom on hover
+        self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
+        self._anim_blur.setDuration(180)
+        self._anim_blur.setEndValue(24.0)
+        self._anim_blur.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        self._anim_offset = QPropertyAnimation(self._shadow, b"yOffset")
+        self._anim_offset.setDuration(180)
+        self._anim_offset.setEndValue(7.0)
+        self._anim_offset.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        self._shadow.setColor(QColor(99, 102, 241, 100))
+        self._anim_blur.start()
+        self._anim_offset.start()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
+        self._anim_blur.setDuration(180)
+        self._anim_blur.setEndValue(10.0)
+        self._anim_blur.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        self._anim_offset = QPropertyAnimation(self._shadow, b"yOffset")
+        self._anim_offset.setDuration(180)
+        self._anim_offset.setEndValue(3.0)
+        self._anim_offset.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        self._shadow.setColor(QColor(0, 0, 0, 75))
+        self._anim_blur.start()
+        self._anim_offset.start()
 
     def _cleanup_loader(self):
         if self._thumb_url:
