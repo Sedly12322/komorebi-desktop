@@ -1,6 +1,6 @@
-; Inno Setup Script for Wallhaven Desktop
-#define MyAppName "Wallhaven Desktop"
-#define MyAppVersion "1.4.2"
+; Inno Setup Script for Komorebi Desktop
+#define MyAppName "Komorebi Desktop"
+#define MyAppVersion "1.5.0"
 #define MyAppPublisher "Sedly12322"
 #define MyAppURL "https://github.com/Sedly12322/wallhaven-desktop"
 #define MyAppExeName "Wallhaven-Desktop.exe"

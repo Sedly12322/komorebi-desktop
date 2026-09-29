@@ -674,7 +674,7 @@ def _send_notification(title: str, msg: str):
     if sys.platform != "win32" and shutil.which("notify-send"):
         try:
             subprocess.run(
-                ["notify-send", "-a", "Wallhaven Desktop", title, msg],
+                ["notify-send", "-a", "Komorebi Desktop", title, msg],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=3,

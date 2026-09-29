@@ -1,4 +1,5 @@
-# 🌌 Wallhaven Desktop
+# 🌿 Komorebi Desktop
+*(formerly Wallhaven Desktop)*
 
 <div align="center">
 
@@ -10,8 +11,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Sedly12322/wallhaven-desktop?style=for-the-badge&logo=github)](https://github.com/Sedly12322/wallhaven-desktop/releases)
 [![GitHub stars](https://img.shields.io/github/stars/Sedly12322/wallhaven-desktop?style=for-the-badge&logo=github&color=gold)](https://github.com/Sedly12322/wallhaven-desktop/stargazers)
 
-**A modern, high-performance desktop wallpaper browser, downloader, and manager for [Wallhaven.cc](https://wallhaven.cc) powered by Python & PyQt6.**  
-Fully supports **Arch Linux** (Wayland / Hyprland / X11) and **Microsoft Windows 10 & 11**.
+**A modern, high-performance desktop wallpaper and avatar browser, downloader, and manager powered by Python & PyQt6.**  
+Seamlessly integrates **Wallhaven.cc**, **MoeWalls (Live Video 4K/60FPS)**, **osu! Seasonal Art**, and **pfps.gg (Avatars & Animated GIFs)**.  
+Fully supports **Arch Linux** (Wayland / Hyprland / Quickshell / Serpantinum / X11) and **Microsoft Windows 10 & 11**.
 
 </div>
 
@@ -35,9 +37,10 @@ cd wallhaven-desktop
 
 Launch the app from anywhere via terminal:
 ```bash
-wallhaven-desktop
-# or simply:
-wallhaven
+komorebi
+# or:
+komorebi-desktop
+# (wallhaven and wallhaven-desktop are also preserved as symlinks)
 ```
 Or launch it from your application launcher (**Rofi**, **Wofi**, **Hyprland menu**, **KDE**, **GNOME**).
 
@@ -142,6 +145,16 @@ makepkg -si
   - **Sorting:** 🏆 Top Voted (Official Contest Winners), 🕒 Newest Season, and 🎲 Random.
   - Search by artist username, illustration title, or season name.
   - Full metadata with artist credits, vote counts, winner badges, and direct links to official contest pages.
+
+- **🎭 Avatars & Profile Pictures (pfps.gg Integration):**
+  - Dedicated **`🎭 Avatars / 🎭 Profilovky`** tab featuring tens of thousands of aesthetic avatars and animated GIFs from [pfps.gg](https://pfps.gg).
+  - **Category Browsing:** Anime, Animated GIF, Aesthetic, Gaming, Cute, Meme, Dark, Matching, Cool, Pixel Art, Discord, etc.
+  - **Sorting:** Top Rated, Most Downloaded, Newest.
+  - **Keyword Search:** Instant full-text search across pfps.gg avatars.
+  - **👤 1-Click System Avatar Setter:** Sets any avatar directly as your Linux desktop / display manager user avatar (`~/.face`, `~/.face.icon`) and Serpantinum shell config (`~/.config/serpantinum/settings.json`)!
+  - **📋 Quick Clipboard Copy:** Instantly copy avatar image to clipboard with one click — paste directly into Discord, Telegram, or any chat with `Ctrl+V`.
+  - **💾 Download to Local Folder:** Download avatars to `~/Pictures/Avatars/` or `~/Obrázky/Avatary/`.
+  - **Full Preview Dialog:** High-resolution preview with animated GIF playback via `QMovie`.
 
 - **💾 Installed Wallpapers & Uninstallation (Správa nainstalovaných tapet):**
   - Dedicated **`💾 Installed / 💾 Nainstalované`** tab managing all wallpapers downloaded across all providers (**Wallhaven**, **MoeWalls**, and **osu! Seasonal**).

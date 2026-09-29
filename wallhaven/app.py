@@ -70,7 +70,7 @@ def main():
 
         try:
             import ctypes
-            myappid = "sedly.wallhaven.desktop.1.0"
+            myappid = "sedly.komorebi.desktop.1.0"
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         except Exception:
             pass
@@ -79,9 +79,9 @@ def main():
         os.environ.setdefault("QT_QPA_PLATFORM", "wayland;xcb")
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Wallhaven Desktop")
-    app.setApplicationDisplayName("Wallhaven Desktop")
-    app.setDesktopFileName("wallhaven-desktop")
+    app.setApplicationName("Komorebi Desktop")
+    app.setApplicationDisplayName("Komorebi Desktop")
+    app.setDesktopFileName("komorebi-desktop")
 
     # Set icon if available (prefer ICO on Windows, PNG on Linux)
     icon_name = "icon.ico" if sys.platform == "win32" else "icon.png"

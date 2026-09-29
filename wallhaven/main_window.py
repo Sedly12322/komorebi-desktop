@@ -32,7 +32,9 @@ from wallhaven.widgets.grid_widget import WallpaperGridWidget
 from wallhaven.widgets.color_bar import ColorBar
 from wallhaven.widgets.detail_dialog import DetailDialog, DownloadWorker
 from wallhaven.widgets.settings_dialog import SettingsDialog
+from wallhaven.widgets.pfp_detail_dialog import PfpDetailDialog
 from wallhaven.wallpaper import set_desktop_wallpaper
+from wallhaven.pfps import pfps_client, PfpItem
 
 
 class SearchWorker(QThread):
@@ -103,6 +105,24 @@ class InstalledSearchWorker(QThread):
             self.failed.emit(self.search_id, str(e))
 
 
+class PfpsSearchWorker(QThread):
+    finished = pyqtSignal(int, list, bool, int)
+    failed = pyqtSignal(int, str)
+
+    def __init__(self, search_id: int, **kwargs):
+        super().__init__()
+        self.search_id = search_id
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            page = self.kwargs.get("page", 1)
+            items, has_next = pfps_client.fetch_pfps(**self.kwargs)
+            self.finished.emit(self.search_id, items, has_next, page)
+        except Exception as e:
+            self.failed.emit(self.search_id, str(e))
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -141,10 +161,10 @@ class MainWindow(QMainWindow):
         # Brand logo
         brand_layout = QHBoxLayout()
         brand_layout.setSpacing(6)
-        brand_icon = QLabel("🖼️")
+        brand_icon = QLabel("🌿")
         brand_icon.setStyleSheet("font-size: 18px;")
         brand_layout.addWidget(brand_icon)
-        brand_title = QLabel("WALLHAVEN")
+        brand_title = QLabel("KOMOREBI")
         brand_title.setStyleSheet("font-size: 13.5px; font-weight: 900; color: #f8fafc; letter-spacing: 1.5px;")
         brand_layout.addWidget(brand_title)
         h_layout.addLayout(brand_layout)
@@ -181,6 +201,14 @@ class MainWindow(QMainWindow):
         self.tab_osu.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tab_osu.clicked.connect(lambda: self._set_mode("osu"))
         tabs_layout.addWidget(self.tab_osu)
+
+        self.tab_pfps = QPushButton()
+        self.tab_pfps.setObjectName("navTab")
+        self.tab_pfps.setCheckable(True)
+        self.tab_pfps.setChecked(False)
+        self.tab_pfps.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tab_pfps.clicked.connect(lambda: self._set_mode("pfps"))
+        tabs_layout.addWidget(self.tab_pfps)
 
         self.tab_installed = QPushButton()
         self.tab_installed.setObjectName("navTab")
@@ -520,6 +548,41 @@ class MainWindow(QMainWindow):
         inst_layout.addStretch()
         main_layout.addWidget(self.installed_filter_bar)
 
+        # 2E. PFPs (Profile Pictures & Avatars) Filter Bar
+        self.pfps_filter_bar = QFrame()
+        self.pfps_filter_bar.setObjectName("filterPanel")
+        self.pfps_filter_bar.setVisible(False)
+        pfps_layout = QHBoxLayout(self.pfps_filter_bar)
+        pfps_layout.setContentsMargins(16, 6, 16, 6)
+        pfps_layout.setSpacing(10)
+
+        self.pfps_cat_lbl = QLabel(tr("pfps_category_label"))
+        self.pfps_cat_lbl.setStyleSheet("color: #7e8a9f; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;")
+        pfps_layout.addWidget(self.pfps_cat_lbl)
+
+        self.pfps_cat_combo = QComboBox()
+        self.pfps_cat_combo.setMinimumWidth(160)
+        self.pfps_cat_combo.currentIndexChanged.connect(lambda: self.perform_search(page=1))
+        pfps_layout.addWidget(self.pfps_cat_combo)
+
+        pfps_layout.addSpacing(8)
+
+        self.pfps_sort_lbl = QLabel(tr("pfps_sort_label"))
+        self.pfps_sort_lbl.setStyleSheet("color: #7e8a9f; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;")
+        pfps_layout.addWidget(self.pfps_sort_lbl)
+
+        self.pfps_sort_combo = QComboBox()
+        self.pfps_sort_combo.setMinimumWidth(150)
+        self.pfps_sort_combo.currentIndexChanged.connect(lambda: self.perform_search(page=1))
+        pfps_layout.addWidget(self.pfps_sort_combo)
+
+        pfps_badge = QLabel("🎭 pfps.gg Avatars & GIFs")
+        pfps_badge.setStyleSheet("color: #ec4899; font-size: 11px; font-weight: bold; margin-left: 8px;")
+        pfps_layout.addWidget(pfps_badge)
+
+        pfps_layout.addStretch()
+        main_layout.addWidget(self.pfps_filter_bar)
+
         # 3. Color Bar (Collapsible, Wallhaven only)
         self.color_bar = ColorBar()
         self.color_bar.setVisible(False)
@@ -534,6 +597,10 @@ class MainWindow(QMainWindow):
         self.grid_widget.download_requested.connect(self._on_quick_download)
         self.grid_widget.uninstall_requested.connect(self._on_uninstall_requested)
         self.grid_widget.set_wall_requested.connect(self._on_quick_set_wallpaper)
+        self.grid_widget.pfp_clicked.connect(self._on_pfp_clicked)
+        self.grid_widget.pfp_download_requested.connect(self._on_pfp_download)
+        self.grid_widget.pfp_set_avatar_requested.connect(self._on_pfp_set_avatar)
+        self.grid_widget.pfp_copy_requested.connect(self._on_pfp_copy)
         self.scroll_area.setWidget(self.grid_widget)
         main_layout.addWidget(self.scroll_area, stretch=1)
 
@@ -731,17 +798,45 @@ class MainWindow(QMainWindow):
                 self.moe_res_combo.setCurrentIndex(idx)
         self.moe_res_combo.blockSignals(False)
 
+    def _retranslate_pfps_combos(self):
+        cur_cat = self.pfps_cat_combo.currentData()
+        self.pfps_cat_combo.blockSignals(True)
+        self.pfps_cat_combo.clear()
+        for cat_id, cat_cs, cat_en in pfps_client.get_categories():
+            text = cat_cs if i18n.current_language == "cs" else cat_en
+            self.pfps_cat_combo.addItem(text, cat_id)
+        if cur_cat is not None:
+            idx = self.pfps_cat_combo.findData(cur_cat)
+            if idx >= 0:
+                self.pfps_cat_combo.setCurrentIndex(idx)
+        self.pfps_cat_combo.blockSignals(False)
+
+        cur_sort = self.pfps_sort_combo.currentData()
+        self.pfps_sort_combo.blockSignals(True)
+        self.pfps_sort_combo.clear()
+        for sort_id, sort_cs, sort_en in pfps_client.get_sorting_options():
+            text = sort_cs if i18n.current_language == "cs" else sort_en
+            self.pfps_sort_combo.addItem(text, sort_id)
+        if cur_sort is not None:
+            idx = self.pfps_sort_combo.findData(cur_sort)
+            if idx >= 0:
+                self.pfps_sort_combo.setCurrentIndex(idx)
+        self.pfps_sort_combo.blockSignals(False)
+
     def retranslate_ui(self):
         self.setWindowTitle(tr("app_title"))
         self.tab_wallhaven.setText(tr("tab_wallhaven"))
         self.tab_moewalls.setText(tr("tab_moewalls"))
         self.tab_osu.setText(tr("tab_osu"))
+        self.tab_pfps.setText(tr("tab_pfps"))
         self.tab_installed.setText(tr("tab_installed"))
 
         if self.current_mode == "osu":
             self.search_input.setPlaceholderText(tr("osu_search_placeholder"))
         elif self.current_mode == "moewalls":
             self.search_input.setPlaceholderText(tr("moe_search_placeholder"))
+        elif self.current_mode == "pfps":
+            self.search_input.setPlaceholderText(tr("pfps_search_placeholder"))
         elif self.current_mode == "installed":
             self.search_input.setPlaceholderText(tr("installed_search_placeholder"))
         else:
@@ -780,6 +875,11 @@ class MainWindow(QMainWindow):
         self.inst_open_folder_btn.setText(tr("installed_open_folder"))
         self._retranslate_installed_combos()
 
+        # PFPs filter labels
+        self.pfps_cat_lbl.setText(tr("pfps_category_label"))
+        self.pfps_sort_lbl.setText(tr("pfps_sort_label"))
+        self._retranslate_pfps_combos()
+
         # Pagination
         self.first_btn.setText(tr("first_page"))
         self.prev_btn.setText(tr("prev_page"))
@@ -797,6 +897,8 @@ class MainWindow(QMainWindow):
             stats = installed_manager.get_stats()
             self.total_count_lbl.setText(tr("installed_total_found", total=f"{self.total_count:,}", size=stats["human_size"]))
             self.inst_stats_lbl.setText(f"💾 {stats['human_size']}")
+        elif self.current_mode == "pfps":
+            self.total_count_lbl.setText(f"Nalezeno {self.total_count} profilovek (Strana {self.current_page})")
         else:
             self.total_count_lbl.setText(tr("total_found", total=f"{self.total_count:,}"))
 
@@ -805,6 +907,7 @@ class MainWindow(QMainWindow):
             self.tab_wallhaven.setChecked(mode == "wallhaven")
             self.tab_moewalls.setChecked(mode == "moewalls")
             self.tab_osu.setChecked(mode == "osu")
+            self.tab_pfps.setChecked(mode == "pfps")
             self.tab_installed.setChecked(mode == "installed")
             return
 
@@ -812,18 +915,22 @@ class MainWindow(QMainWindow):
         self.tab_wallhaven.setChecked(mode == "wallhaven")
         self.tab_moewalls.setChecked(mode == "moewalls")
         self.tab_osu.setChecked(mode == "osu")
+        self.tab_pfps.setChecked(mode == "pfps")
         self.tab_installed.setChecked(mode == "installed")
 
         is_wall = (mode == "wallhaven")
         is_moe = (mode == "moewalls")
         is_osu = (mode == "osu")
+        is_pfps = (mode == "pfps")
         is_inst = (mode == "installed")
 
         self.wallhaven_filter_bar.setVisible(is_wall)
         self.moe_filter_bar.setVisible(is_moe)
         self.osu_filter_bar.setVisible(is_osu)
+        self.pfps_filter_bar.setVisible(is_pfps)
         self.installed_filter_bar.setVisible(is_inst)
         self.color_toggle_btn.setVisible(is_wall)
+        self.auto_wall_btn.setVisible(not is_pfps)
         if not is_wall:
             self.color_bar.setVisible(False)
         else:
@@ -836,6 +943,8 @@ class MainWindow(QMainWindow):
             self.search_input.setPlaceholderText(tr("moe_search_placeholder"))
         elif is_osu:
             self.search_input.setPlaceholderText(tr("osu_search_placeholder"))
+        elif is_pfps:
+            self.search_input.setPlaceholderText(tr("pfps_search_placeholder"))
         else:
             self.search_input.setPlaceholderText(tr("installed_search_placeholder"))
 
@@ -988,6 +1097,20 @@ class MainWindow(QMainWindow):
                 page=page,
                 per_page=24,
             )
+        elif self.current_mode == "pfps":
+            cat = self.pfps_cat_combo.currentData() or "anime"
+            sorting = self.pfps_sort_combo.currentData() or "top"
+            self.active_search_worker = PfpsSearchWorker(
+                search_id=search_id,
+                query=query,
+                category=cat,
+                sort=sorting,
+                page=page,
+            )
+            self.active_search_worker.finished.connect(self._on_pfp_search_success)
+            self.active_search_worker.failed.connect(self._on_search_failed)
+            self.active_search_worker.start()
+            return
         else:
             cats = self._get_categories_str()
             purity = self._get_purity_str()
@@ -1057,6 +1180,40 @@ class MainWindow(QMainWindow):
         self.search_btn.setEnabled(True)
         self.status_bar.showMessage(tr("status_search_error", error=error))
         QMessageBox.warning(self, tr("search_failed_title"), tr("search_failed_msg", error=error))
+
+    def _on_pfp_search_success(self, search_id: int, items: list[PfpItem], has_next: bool, page: int):
+        if search_id != self.current_search_id:
+            return
+
+        self.search_btn.setEnabled(True)
+        self.current_page = page
+        self.last_page = page + 1 if has_next else page
+        self.total_count = len(items)
+
+        self.grid_widget.set_pfp_items(items)
+        self.scroll_area.verticalScrollBar().setValue(0)
+
+        # Update pagination
+        is_cs = (i18n.current_language == "cs")
+        self.page_info_lbl.setText(f"Strana {self.current_page}" if is_cs else f"Page {self.current_page}")
+        self.page_spin.setRange(1, 9999)
+        self.page_spin.setValue(self.current_page)
+        self.total_count_lbl.setText(
+            f"Zobrazeno {len(items)} profilovek (Strana {self.current_page})"
+            if is_cs
+            else f"Showing {len(items)} avatars (Page {self.current_page})"
+        )
+
+        self.prev_btn.setEnabled(self.current_page > 1)
+        self.first_btn.setEnabled(self.current_page > 1)
+        self.next_btn.setEnabled(has_next)
+        self.last_btn.setEnabled(False)
+
+        self.status_bar.showMessage(
+            f"Načteno {len(items)} profilovek (Strana {self.current_page})"
+            if is_cs
+            else f"Loaded {len(items)} avatars (Page {self.current_page})"
+        )
 
     def _on_card_clicked(self, item: WallpaperItem):
         dlg = DetailDialog(item, self)
@@ -1186,3 +1343,54 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(tr("status_download_done_wall", filename=filename), 8000)
         else:
             self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
+
+    def _on_pfp_clicked(self, item: PfpItem):
+        dlg = PfpDetailDialog(item, self)
+        dlg.exec()
+
+    def _on_pfp_download(self, item: PfpItem):
+        is_cs = (i18n.current_language == "cs")
+        self.status_bar.showMessage(
+            f"Stahuji profilovku {item.title}..." if is_cs else f"Downloading avatar {item.title}..."
+        )
+        ok, res = pfps_client.download_pfp(item)
+        if ok:
+            self.status_bar.showMessage(
+                f"Profilovka uložena do {res}" if is_cs else f"Avatar saved to {res}",
+                8000,
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Chyba stahování" if is_cs else "Download Error",
+                f"Stahování profilovky selhalo:\n{res}" if is_cs else f"Avatar download failed:\n{res}",
+            )
+
+    def _on_pfp_set_avatar(self, item: PfpItem):
+        is_cs = (i18n.current_language == "cs")
+        self.status_bar.showMessage(
+            f"Nastavuji profilovku systému pro {item.title}..." if is_cs else f"Setting system avatar {item.title}..."
+        )
+        ok, msg = pfps_client.set_system_avatar(item)
+        if ok:
+            self.status_bar.showMessage(f"✓ {msg}", 8000)
+            QMessageBox.information(
+                self,
+                "Profilovka nastavena" if is_cs else "Avatar Set",
+                msg,
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Chyba nastavení profilovky" if is_cs else "Avatar Set Error",
+                msg,
+            )
+
+    def _on_pfp_copy(self, item: PfpItem):
+        is_cs = (i18n.current_language == "cs")
+        self.status_bar.showMessage(
+            f"✓ Profilovka '{item.title}' zkopírována do schránky (vložte Ctrl+V)"
+            if is_cs
+            else f"✓ Avatar '{item.title}' copied to clipboard (paste with Ctrl+V)",
+            6000,
+        )

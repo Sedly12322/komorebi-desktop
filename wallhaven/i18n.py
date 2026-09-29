@@ -6,11 +6,16 @@ from wallhaven.config import config
 TRANSLATIONS = {
     "en": {
         # App & Header
-        "app_title": "Wallhaven Desktop",
+        "app_title": "Komorebi Desktop",
         "tab_wallhaven": "🌌 Wallhaven",
         "tab_moewalls": "🎬 MoeWalls",
         "tab_osu": "🎯 osu!",
+        "tab_pfps": "🎭 PFPs",
         "tab_installed": "💾 Installed",
+        "pfps_search_placeholder": "Search profile pictures & avatars... (e.g. anime, cat, lofi, matching)",
+        "pfps_category_label": "Category:",
+        "pfps_sort_label": "Sort:",
+        "pfps_badge": "🎭 100 000+ Avatars & PFPs (pfps.gg)",
         "installed_search_placeholder": "Search installed wallpapers by name, tag, provider...",
         "installed_provider_label": "Provider:",
         "installed_provider_all": "All Providers",
@@ -243,11 +248,16 @@ TRANSLATIONS = {
     },
     "cs": {
         # App & Header
-        "app_title": "Wallhaven Desktop",
+        "app_title": "Komorebi Desktop",
         "tab_wallhaven": "🌌 Wallhaven",
         "tab_moewalls": "🎬 MoeWalls",
         "tab_osu": "🎯 osu!",
+        "tab_pfps": "🎭 Profilovky",
         "tab_installed": "💾 Stažené",
+        "pfps_search_placeholder": "Hledat profilovky a avatary... (např. anime, kočka, lofi, matching)",
+        "pfps_category_label": "Kategorie:",
+        "pfps_sort_label": "Řazení:",
+        "pfps_badge": "🎭 100 000+ Profilovek & Avatarů (pfps.gg)",
         "installed_search_placeholder": "Hledat v nainstalovaných tapetách podle názvu, štítku, zdroje...",
         "installed_provider_label": "Zdroj:",
         "installed_provider_all": "Všechny zdroje",
