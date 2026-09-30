@@ -38,6 +38,7 @@ from wallhaven.widgets.animated_nav import AnimatedCapsuleBar
 from wallhaven.widgets.smooth_scroll import SmoothScrollArea
 from wallhaven.widgets.sidebar import KomorebiSidebar
 from wallhaven.widgets.floating_pagination import FloatingPagination, CanvasWrapper
+from wallhaven.widgets.ambient_background import KomorebiAmbientCanvas
 from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
@@ -181,8 +182,8 @@ class MainWindow(QMainWindow):
         self.theme_picker_btn = self.sidebar.theme_btn
         self.settings_btn = self.sidebar.settings_btn
 
-        # 2. Main Content Canvas (Right Pane)
-        self.content_canvas = QWidget()
+        # 2. Main Content Canvas with dynamic Komorebi ambient background
+        self.content_canvas = KomorebiAmbientCanvas(self)
         self.canvas_vlayout = QVBoxLayout(self.content_canvas)
         self.canvas_vlayout.setContentsMargins(0, 0, 0, 0)
         self.canvas_vlayout.setSpacing(0)
@@ -965,6 +966,8 @@ class MainWindow(QMainWindow):
                 self.sidebar.update_theme_display(config.theme)
             if hasattr(self, "pagination"):
                 self.pagination._apply_capsule_style()
+            if hasattr(self, "content_canvas") and hasattr(self.content_canvas, "set_effects_enabled"):
+                self.content_canvas.set_effects_enabled(config.background_effects)
             # If API key changed, refresh
             self.perform_search(page=self.current_page)
 
@@ -1426,6 +1429,8 @@ class MainWindow(QMainWindow):
             self.sidebar.update_theme_display(theme_id)
         if hasattr(self, "pagination"):
             self.pagination._apply_capsule_style()
+        if hasattr(self, "content_canvas") and hasattr(self.content_canvas, "update"):
+            self.content_canvas.update()
         if hasattr(self, "toast"):
             name = display_name or theme_id.capitalize()
             self.toast.show_message(f"Motiv: {name}", icon="🎨", duration_ms=2500)

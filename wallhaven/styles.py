@@ -1161,7 +1161,16 @@ QPushButton#themeChip:checked {
 }
 
 /* Scroll Area & Sleek Modern Scrollbar */
-QScrollArea {
+QWidget#ambientContentCanvas {
+    background-color: transparent;
+}
+
+QWidget#canvasWrapper, QWidget#wallpaperGrid {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea, QScrollArea > QWidget, QScrollArea > QWidget > QWidget {
     border: none;
     background-color: transparent;
 }

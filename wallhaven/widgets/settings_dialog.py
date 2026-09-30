@@ -90,6 +90,12 @@ class SettingsDialog(QDialog):
         row2.addWidget(self.lang_combo, 1)
         theme_layout.addLayout(row2)
 
+        self.bg_effects_cb = QCheckBox(tr("bg_effects_label"))
+        self.bg_effects_cb.setChecked(config.background_effects)
+        self.bg_effects_cb.setStyleSheet("color: #cbd5e1; font-size: 12px; font-weight: 600; margin-top: 4px;")
+        self.bg_effects_cb.toggled.connect(self._on_bg_effects_toggled)
+        theme_layout.addWidget(self.bg_effects_cb)
+
         layout.addWidget(self.theme_group)
 
         # 2. API Key Section
@@ -334,12 +340,20 @@ class SettingsDialog(QDialog):
         if new_lang:
             i18n.set_language(new_lang)
 
+    def _on_bg_effects_toggled(self, checked: bool):
+        config.background_effects = checked
+        parent = self.parent()
+        if parent and hasattr(parent, "content_canvas") and hasattr(parent.content_canvas, "set_effects_enabled"):
+            parent.content_canvas.set_effects_enabled(checked)
+
     def retranslate_ui(self):
         self.setWindowTitle(tr("settings_title"))
         self.title_lbl.setText(tr("settings_title"))
         self.theme_group.setTitle(tr("theme_section"))
         self.theme_label.setText(tr("theme_label"))
         self.lang_label.setText(tr("lang_label"))
+        if hasattr(self, "bg_effects_cb"):
+            self.bg_effects_cb.setText(tr("bg_effects_label"))
         self.api_group.setTitle(tr("api_group"))
         self.api_desc.setText(tr("api_desc"))
         self.api_key_input.setPlaceholderText(tr("api_placeholder"))
@@ -410,5 +424,7 @@ class SettingsDialog(QDialog):
         config.custom_video_wallpaper_cmd = self.custom_video_input.text().strip()
         config.language = self.lang_combo.currentData()
         config.set("theme", self.theme_combo.currentData() or "dark")
+        if hasattr(self, "bg_effects_cb"):
+            config.background_effects = self.bg_effects_cb.isChecked()
         config.save()
         self.accept()

@@ -223,6 +223,9 @@ class CanvasWrapper(QWidget):
 
     def __init__(self, scroll_area: QWidget, pagination: FloatingPagination, parent=None):
         super().__init__(parent)
+        self.setObjectName("canvasWrapper")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet("background: transparent; border: none;")
         self.scroll_area = scroll_area
         self.pagination = pagination
 

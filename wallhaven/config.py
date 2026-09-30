@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "custom_video_wallpaper_cmd": "",
     "moewalls_category": "all",
     "language": "en",
+    "background_effects": True,
 }
 
 
@@ -169,6 +170,14 @@ class Config:
     @theme.setter
     def theme(self, val: str):
         self.set("theme", str(val).strip())
+
+    @property
+    def background_effects(self) -> bool:
+        return bool(self._config.get("background_effects", True))
+
+    @background_effects.setter
+    def background_effects(self, val: bool):
+        self.set("background_effects", bool(val))
 
 
 config = Config()

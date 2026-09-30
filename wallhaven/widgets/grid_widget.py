@@ -20,6 +20,9 @@ class WallpaperGridWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("wallpaperGrid")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet("background: transparent; border: none;")
         self.cards: list[QFrame] = []
         self.items: list[Any] = []
 
