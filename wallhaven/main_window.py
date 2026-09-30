@@ -41,7 +41,7 @@ from wallhaven.widgets.floating_pagination import FloatingPagination, CanvasWrap
 from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
-from wallhaven.styles import get_available_themes, apply_theme
+from wallhaven.styles import get_available_themes, apply_theme, get_palette
 
 
 class SearchWorker(QThread):
@@ -146,6 +146,10 @@ class MainWindow(QMainWindow):
         self.current_color = ""
         self.active_search_worker: SearchWorker | OsuSearchWorker | None = None
         self.quick_download_worker: DownloadWorker | None = None
+
+        app = QApplication.instance()
+        if app and not app.styleSheet():
+            apply_theme(config.theme)
 
         self._init_ui()
         i18n.language_changed.connect(self.retranslate_ui)
@@ -957,6 +961,10 @@ class MainWindow(QMainWindow):
         dlg = SettingsDialog(self)
         if dlg.exec():
             self.auto_wall_btn.setChecked(config.auto_set_wallpaper)
+            if hasattr(self, "sidebar"):
+                self.sidebar.update_theme_display(config.theme)
+            if hasattr(self, "pagination"):
+                self.pagination._apply_capsule_style()
             # If API key changed, refresh
             self.perform_search(page=self.current_page)
 
@@ -1359,24 +1367,31 @@ class MainWindow(QMainWindow):
 
     def _show_quick_theme_menu(self):
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #12151f;
-                color: #f8fafc;
-                border: 1px solid #283045;
-                border-radius: 10px;
+        pal = get_palette(config.theme)
+        bg = pal.get("bg_surface", "#12151f")
+        fg = pal.get("text_primary", "#f8fafc")
+        border = pal.get("border", "#283045")
+        accent = pal.get("accent", "#6366f1")
+        accent_text = pal.get("accent_text", "#ffffff")
+
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {bg};
+                color: {fg};
+                border: 1px solid {border};
+                border-radius: 12px;
                 padding: 6px;
-            }
-            QMenu::item {
-                padding: 6px 18px;
+            }}
+            QMenu::item {{
+                padding: 7px 22px;
                 border-radius: 6px;
-                font-size: 12px;
+                font-size: 12.5px;
                 font-weight: 500;
-            }
-            QMenu::item:selected {
-                background: #6366f1;
-                color: #ffffff;
-            }
+            }}
+            QMenu::item:selected {{
+                background: {accent};
+                color: {accent_text};
+            }}
         """)
         themes = get_available_themes()
         cur_theme = config.theme
@@ -1384,14 +1399,27 @@ class MainWindow(QMainWindow):
             action = menu.addAction(display_name)
             action.setCheckable(True)
             action.setChecked(theme_id == cur_theme)
-            action.triggered.connect(lambda chk, tid=theme_id: self._on_quick_theme_selected(tid))
+            action.triggered.connect(lambda chk, tid=theme_id, dname=display_name: self._on_quick_theme_selected(tid, dname))
 
-        pos = self.theme_picker_btn.mapToGlobal(QPoint(0, self.theme_picker_btn.height() + 4))
-        menu.exec(pos)
+        menu.adjustSize()
+        menu_sz = menu.sizeHint()
 
-    def _on_quick_theme_selected(self, theme_id: str):
+        # Pop out to the right of the sidebar, aligned with the theme button
+        btn = self.sidebar.theme_btn if hasattr(self, "sidebar") else self.theme_picker_btn
+        btn_top_right = btn.mapToGlobal(QPoint(btn.width() + 8, 0))
+        target_x = btn_top_right.x()
+        target_y = btn_top_right.y() + btn.height() - menu_sz.height()
+        target_y = max(16, target_y)
+        menu.exec(QPoint(target_x, target_y))
+
+    def _on_quick_theme_selected(self, theme_id: str, display_name: str = ""):
         config.theme = theme_id
         config.save()
         apply_theme(theme_id)
+        if hasattr(self, "sidebar"):
+            self.sidebar.update_theme_display(theme_id)
+        if hasattr(self, "pagination"):
+            self.pagination._apply_capsule_style()
         if hasattr(self, "toast"):
-            self.toast.show_message(f"Barevný motiv aktivován", icon="🎨", duration_ms=2500)
+            name = display_name or theme_id.capitalize()
+            self.toast.show_message(f"Motiv: {name}", icon="🎨", duration_ms=2500)

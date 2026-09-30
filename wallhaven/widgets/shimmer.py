@@ -99,8 +99,8 @@ class ShimmerLabel(QLabel):
         painter.setClipPath(path)
 
         if self._is_shimmering or not self._pixmap or self._pixmap.isNull():
-            # Base dark container color
-            painter.fillPath(path, QColor(16, 19, 28))
+            # Base dark container color matching modern card style
+            painter.fillPath(path, QColor(21, 25, 36))
 
             # Animated wave gradient
             phase = ShimmerLabel._shared_phase
@@ -109,17 +109,33 @@ class ShimmerLabel(QLabel):
             center_x = (phase * (w + wave_width * 2)) - wave_width
 
             gradient = QLinearGradient(center_x - wave_width / 2, 0, center_x + wave_width / 2, 0)
-            gradient.setColorAt(0.0, QColor(25, 30, 44, 0))
-            gradient.setColorAt(0.5, QColor(70, 85, 120, 110))
-            gradient.setColorAt(1.0, QColor(25, 30, 44, 0))
+            gradient.setColorAt(0.0, QColor(32, 38, 55, 0))
+            gradient.setColorAt(0.5, QColor(99, 102, 241, 70))
+            gradient.setColorAt(1.0, QColor(32, 38, 55, 0))
 
             painter.fillPath(path, gradient)
 
             # Subtle inner border
             pen = painter.pen()
-            pen.setColor(QColor(36, 43, 62, 120))
+            pen.setColor(QColor(45, 55, 78, 120))
             pen.setWidthF(1.0)
             painter.strokePath(path, pen)
+
+            txt = self.text()
+            if txt:
+                painter.setPen(QColor(148, 163, 184))
+                font = painter.font()
+                font.setPointSize(11)
+                font.setBold(True)
+                painter.setFont(font)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, txt)
+            else:
+                font = painter.font()
+                font.setPointSize(24)
+                painter.setFont(font)
+                painter.setOpacity(0.22)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "🖼️")
+                painter.setOpacity(1.0)
         else:
             painter.setOpacity(self._fade_opacity)
             painter.drawPixmap(0, 0, self._pixmap)

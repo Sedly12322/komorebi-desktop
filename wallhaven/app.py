@@ -93,7 +93,7 @@ def main():
         app.setWindowIcon(QIcon(str(icon_path)))
 
     # Apply global stylesheet according to saved theme
-    theme_id = config.get("theme", "matugen" if sys.platform != "win32" and is_matugen_available() else "dark")
+    theme_id = config.theme
     app.setStyleSheet(get_stylesheet(theme_id))
 
     # Initialize dynamic theme watcher for real-time Matugen color updates

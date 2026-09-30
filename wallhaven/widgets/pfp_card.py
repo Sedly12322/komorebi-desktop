@@ -96,6 +96,9 @@ class PfpCard(QFrame):
 
         # Center/Bottom Floating action buttons on hover
         self.hover_bar = QWidget(self.image_label)
+        self.hover_bar.setObjectName("cardHoverBar")
+        self.hover_bar.setStyleSheet("background: transparent; border: none;")
+        self.hover_bar.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.hover_bar.setVisible(False)
         hover_layout = QHBoxLayout(self.hover_bar)
         hover_layout.setContentsMargins(0, 0, 0, 4)

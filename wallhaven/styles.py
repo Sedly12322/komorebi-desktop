@@ -1256,9 +1256,9 @@ QSpinBox:focus {
 
 /* Status Bar */
 QStatusBar {
-    background-color: %(bg_capsule)s;
+    background-color: transparent;
     color: %(text_muted)s;
-    border-top: 1px solid %(border_subtle)s;
+    border: none;
     font-size: 12px;
     padding: 3px 12px;
 }

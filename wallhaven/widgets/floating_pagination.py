@@ -121,53 +121,61 @@ class FloatingPagination(QFrame):
         self._apply_capsule_style()
 
     def _apply_capsule_style(self):
-        self.setStyleSheet("""
-            QFrame#floatingPagination {
-                background-color: rgba(15, 18, 28, 0.92);
-                border: 1px solid rgba(255, 255, 255, 0.12);
+        from wallhaven.config import config
+        from wallhaven.styles import get_palette
+        pal = get_palette(config.theme)
+        bg = pal.get("bg_surface", "#12151f")
+        border = pal.get("border", "#283045")
+        accent = pal.get("accent", "#6366f1")
+        text = pal.get("text_primary", "#f8fafc")
+
+        self.setStyleSheet(f"""
+            QFrame#floatingPagination {{
+                background-color: {bg};
+                border: 1px solid {border};
                 border-radius: 22px;
-            }
-            QPushButton#paginationPillBtn {
-                background-color: rgba(255, 255, 255, 0.06);
-                color: #e2e8f0;
+            }}
+            QPushButton#paginationPillBtn {{
+                background-color: rgba(255, 255, 255, 0.05);
+                color: {text};
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 border-radius: 14px;
                 font-size: 14px;
                 font-weight: bold;
                 padding: 0;
-            }
-            QPushButton#paginationPillBtn:hover {
-                background-color: rgba(99, 102, 241, 0.4);
-                border-color: rgba(129, 140, 248, 0.6);
+            }}
+            QPushButton#paginationPillBtn:hover {{
+                background-color: {accent};
+                border-color: {accent};
                 color: #ffffff;
-            }
-            QPushButton#paginationPillBtn:disabled {
+            }}
+            QPushButton#paginationPillBtn:disabled {{
                 background-color: transparent;
                 color: #475569;
                 border-color: transparent;
-            }
-            QPushButton#paginationInfoBtn {
+            }}
+            QPushButton#paginationInfoBtn {{
                 background-color: transparent;
-                color: #f1f5f9;
+                color: {text};
                 border: none;
                 border-radius: 12px;
                 font-size: 12px;
                 font-weight: 700;
                 padding: 0 8px;
-            }
-            QPushButton#paginationInfoBtn:hover {
+            }}
+            QPushButton#paginationInfoBtn:hover {{
                 background-color: rgba(255, 255, 255, 0.06);
-                color: #818cf8;
-            }
-            QSpinBox#paginationSpin {
-                background-color: rgba(30, 41, 59, 0.9);
-                color: #ffffff;
-                border: 1px solid #4f46e5;
+                color: {accent};
+            }}
+            QSpinBox#paginationSpin {{
+                background-color: {pal.get('bg_input', '#1e293b')};
+                color: {text};
+                border: 1px solid {accent};
                 border-radius: 8px;
                 padding: 2px 6px;
                 font-size: 12px;
                 font-weight: bold;
-            }
+            }}
         """)
 
     def _toggle_quick_jump(self):
@@ -190,6 +198,7 @@ class FloatingPagination(QFrame):
         self.current_page = max(1, current_page)
         self.last_page = max(1, last_page)
         self.total_count = total_count
+        self._apply_capsule_style()
         self._update_display()
 
     def _update_display(self):

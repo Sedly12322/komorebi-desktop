@@ -37,7 +37,7 @@ from PyQt6.QtWidgets import (
 )
 from wallhaven.i18n import tr
 from wallhaven.config import config
-from wallhaven.styles import get_available_themes, apply_theme
+from wallhaven.styles import get_available_themes, apply_theme, get_palette
 
 
 class SidebarNavItem(QPushButton):
@@ -335,14 +335,22 @@ class SidebarNavContainer(QWidget):
                 10.0,
             )
 
-            # Elegant linear gradient with vibrant indigo / purple
+            # Dynamic linear gradient adapting to active theme palette
+            pal = get_palette(config.theme)
+            c_start = QColor(pal.get("accent_gradient_start", pal.get("accent", "#4f46e5")))
+            c_end = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#7c3aed")))
+            c_start.setAlpha(235)
+            c_end.setAlpha(235)
+
             grad = QLinearGradient(float(ir.x()), float(ir.y()), float(ir.x() + ir.width()), float(ir.y() + ir.height()))
-            grad.setColorAt(0.0, QColor(79, 70, 229, 235))   # #4f46e5
-            grad.setColorAt(1.0, QColor(124, 58, 237, 235))  # #7c3aed
+            grad.setColorAt(0.0, c_start)
+            grad.setColorAt(1.0, c_end)
             painter.fillPath(pill_path, grad)
 
             # Subtle accent border sheen
-            pen = QPen(QColor(165, 180, 252, 120))
+            sheen_color = QColor(c_start)
+            sheen_color.setAlpha(120)
+            pen = QPen(sheen_color)
             pen.setWidthF(1.2)
             painter.strokePath(pill_path, pen)
 
@@ -496,12 +504,12 @@ class KomorebiSidebar(QFrame):
 
     def _update_auto_wall_btn_style(self):
         if self.auto_wall_btn.isChecked():
-            self.auto_wall_btn.setText("🖼️  Auto-tapeta: ZAP")
+            self.auto_wall_btn.setText("🖼️  Auto-tapeta  •  ZAP")
             self.auto_wall_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: rgba(16, 185, 129, 0.15);
+                    background-color: rgba(16, 185, 129, 0.12);
                     color: #34d399;
-                    border: 1px solid rgba(16, 185, 129, 0.35);
+                    border: none;
                     border-radius: 8px;
                     text-align: left;
                     padding-left: 10px;
@@ -509,16 +517,16 @@ class KomorebiSidebar(QFrame):
                     font-weight: 700;
                 }
                 QPushButton:hover {
-                    background-color: rgba(16, 185, 129, 0.25);
+                    background-color: rgba(16, 185, 129, 0.22);
                 }
             """)
         else:
-            self.auto_wall_btn.setText("🖼️  Auto-tapeta: VYP")
+            self.auto_wall_btn.setText("🖼️  Auto-tapeta  •  VYP")
             self.auto_wall_btn.setStyleSheet("""
                 QPushButton {
                     background-color: transparent;
                     color: #94a3b8;
-                    border: 1px solid transparent;
+                    border: none;
                     border-radius: 8px;
                     text-align: left;
                     padding-left: 10px;
@@ -530,6 +538,26 @@ class KomorebiSidebar(QFrame):
                     color: #f1f5f9;
                 }
             """)
+
+    def update_theme_display(self, theme_id: str = ""):
+        if not theme_id:
+            theme_id = config.theme
+        theme_names = {
+            "matugen": "Matugen",
+            "dark": "Wallhaven",
+            "catppuccin": "Catppuccin",
+            "tokyo_night": "Tokyo Night",
+            "nord": "Nord",
+            "dracula": "Dracula",
+            "gruvbox": "Gruvbox",
+            "cyberpunk": "Cyberpunk",
+            "oled": "OLED",
+            "pywal": "Pywal",
+        }
+        short_name = theme_names.get(theme_id, theme_id.capitalize())
+        theme_label = tr("theme_menu_title") or "Téma"
+        self.theme_btn.setText(f"🎨  {theme_label}: {short_name}")
+        self.nav_container.update()
 
     def retranslate_ui(self):
         if hasattr(self, "nav_container"):
@@ -560,6 +588,6 @@ class KomorebiSidebar(QFrame):
                 )
 
         if hasattr(self, "theme_btn"):
-            self.theme_btn.setText(f"🎨  {tr('theme_menu_title') or 'Téma'}")
+            self.update_theme_display()
         if hasattr(self, "settings_btn"):
             self.settings_btn.setText(f"⚙️  {tr('settings_title') or 'Nastavení'}")

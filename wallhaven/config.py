@@ -162,5 +162,13 @@ class Config:
     def language(self, val: str):
         self.set("language", str(val))
 
+    @property
+    def theme(self) -> str:
+        return str(self._config.get("theme", get_default_theme())).strip()
+
+    @theme.setter
+    def theme(self, val: str):
+        self.set("theme", str(val).strip())
+
 
 config = Config()
