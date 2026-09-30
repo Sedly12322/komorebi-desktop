@@ -36,6 +36,8 @@ from wallhaven.widgets.settings_dialog import SettingsDialog
 from wallhaven.widgets.pfp_detail_dialog import PfpDetailDialog
 from wallhaven.widgets.animated_nav import AnimatedCapsuleBar
 from wallhaven.widgets.smooth_scroll import SmoothScrollArea
+from wallhaven.widgets.sidebar import KomorebiSidebar
+from wallhaven.widgets.floating_pagination import FloatingPagination, CanvasWrapper
 from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
@@ -152,48 +154,53 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        root_layout = QHBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # 1. Top Header
-        header = QFrame()
-        header.setObjectName("headerPanel")
-        h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(16, 8, 16, 8)
-        h_layout.setSpacing(12)
-
-        # Brand logo
-        brand_layout = QHBoxLayout()
-        brand_layout.setSpacing(6)
-        brand_icon = QLabel("🌿")
-        brand_icon.setStyleSheet("font-size: 18px;")
-        brand_layout.addWidget(brand_icon)
-        brand_title = QLabel("KOMOREBI")
-        brand_title.setStyleSheet("font-size: 13.5px; font-weight: 900; color: #f8fafc; letter-spacing: 1.5px;")
-        brand_layout.addWidget(brand_title)
-        h_layout.addLayout(brand_layout)
-        h_layout.addSpacing(4)
-
-        # Navigation Mode Tabs inside an animated capsule container
-        self.nav_capsule = AnimatedCapsuleBar(self)
-        self.nav_capsule.mode_changed.connect(self._set_mode)
-        h_layout.addWidget(self.nav_capsule)
+        # 1. Modern Left Sidebar Navigation
+        self.sidebar = KomorebiSidebar(self)
+        self.sidebar.mode_changed.connect(self._set_mode)
+        self.sidebar.theme_clicked.connect(self._show_quick_theme_menu)
+        self.sidebar.auto_wall_toggled.connect(self._on_auto_wall_toggled)
+        self.sidebar.settings_clicked.connect(self._open_settings)
+        root_layout.addWidget(self.sidebar)
 
         # Compatibility references
-        self.tab_wallhaven = self.nav_capsule.buttons.get("wallhaven")
-        self.tab_moewalls = self.nav_capsule.buttons.get("moewalls")
-        self.tab_osu = self.nav_capsule.buttons.get("osu")
-        self.tab_pfps = self.nav_capsule.buttons.get("pfps")
-        self.tab_installed = self.nav_capsule.buttons.get("installed")
+        self.nav_capsule = self.sidebar.nav_container
+        self.tab_wallhaven = self.sidebar.nav_container.buttons.get("wallhaven")
+        self.tab_moewalls = self.sidebar.nav_container.buttons.get("moewalls")
+        self.tab_osu = self.sidebar.nav_container.buttons.get("osu")
+        self.tab_pfps = self.sidebar.nav_container.buttons.get("pfps")
+        self.tab_installed = self.sidebar.nav_container.buttons.get("installed")
+        self.auto_wall_btn = self.sidebar.auto_wall_btn
+        self.theme_picker_btn = self.sidebar.theme_btn
+        self.settings_btn = self.sidebar.settings_btn
 
-        # Search box (prominent and flexible with min width)
+        # 2. Main Content Canvas (Right Pane)
+        self.content_canvas = QWidget()
+        self.canvas_vlayout = QVBoxLayout(self.content_canvas)
+        self.canvas_vlayout.setContentsMargins(0, 0, 0, 0)
+        self.canvas_vlayout.setSpacing(0)
+        root_layout.addWidget(self.content_canvas, 1)
+
+        # 2A. Spotlight Search Bar (at the top of canvas)
+        self.spotlight_bar = QFrame()
+        self.spotlight_bar.setObjectName("spotlightBar")
+        s_layout = QHBoxLayout(self.spotlight_bar)
+        s_layout.setContentsMargins(18, 10, 18, 10)
+        s_layout.setSpacing(10)
+
+        search_icon = QLabel("🔍")
+        search_icon.setStyleSheet("font-size: 15px; color: #64748b; background: transparent;")
+        s_layout.addWidget(search_icon)
+
         self.search_input = QLineEdit()
-        self.search_input.setMinimumWidth(130)
-        self.search_input.setFixedHeight(34)
+        self.search_input.setObjectName("spotlightInput")
+        self.search_input.setFixedHeight(38)
         self.search_input.returnPressed.connect(self._on_search_triggered)
         self.search_input.setClearButtonEnabled(True)
-        h_layout.addWidget(self.search_input, stretch=1)
+        s_layout.addWidget(self.search_input, stretch=1)
 
         # Shortcuts to focus search (Ctrl+K or /)
         self.shortcut_search_k = QShortcut(QKeySequence("Ctrl+K"), self)
@@ -201,43 +208,27 @@ class MainWindow(QMainWindow):
         self.shortcut_search_slash = QShortcut(QKeySequence("/"), self)
         self.shortcut_search_slash.activated.connect(self._focus_search)
 
+        self.shortcut_badge = QLabel("Ctrl+K")
+        self.shortcut_badge.setStyleSheet("""
+            background: rgba(255, 255, 255, 0.06);
+            color: #94a3b8;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: monospace;
+        """)
+        s_layout.addWidget(self.shortcut_badge)
+
         self.search_btn = QPushButton()
         self.search_btn.setObjectName("primaryButton")
-        self.search_btn.setFixedHeight(34)
+        self.search_btn.setFixedHeight(38)
         self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_btn.clicked.connect(self._on_search_triggered)
-        h_layout.addWidget(self.search_btn)
+        s_layout.addWidget(self.search_btn)
 
-        h_layout.addSpacing(6)
-
-        # Auto-wallpaper toggle button
-        self.auto_wall_btn = QPushButton()
-        self.auto_wall_btn.setObjectName("headerToolBtn")
-        self.auto_wall_btn.setFixedHeight(34)
-        self.auto_wall_btn.setCheckable(True)
-        self.auto_wall_btn.setChecked(config.auto_set_wallpaper)
-        self.auto_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.auto_wall_btn.clicked.connect(self._on_auto_wall_toggled)
-        h_layout.addWidget(self.auto_wall_btn)
-
-        # Quick Theme Palette Button
-        self.theme_picker_btn = QPushButton("🎨")
-        self.theme_picker_btn.setObjectName("headerToolBtn")
-        self.theme_picker_btn.setFixedHeight(34)
-        self.theme_picker_btn.setToolTip("Rychlý výběr barevného motivu (Theme)")
-        self.theme_picker_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_picker_btn.clicked.connect(self._show_quick_theme_menu)
-        h_layout.addWidget(self.theme_picker_btn)
-
-        # Settings button
-        self.settings_btn = QPushButton()
-        self.settings_btn.setObjectName("headerToolBtn")
-        self.settings_btn.setFixedHeight(34)
-        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.settings_btn.clicked.connect(self._open_settings)
-        h_layout.addWidget(self.settings_btn)
-
-        main_layout.addWidget(header)
+        self.canvas_vlayout.addWidget(self.spotlight_bar)
 
         # 2A. Wallhaven Filter Bar
         self.wallhaven_filter_bar = QFrame()
@@ -364,7 +355,7 @@ class MainWindow(QMainWindow):
         f_layout.addWidget(self.reset_filter_btn)
 
         f_layout.addStretch()
-        main_layout.addWidget(self.wallhaven_filter_bar)
+        self.canvas_vlayout.addWidget(self.wallhaven_filter_bar)
 
         # 2B. osu! Seasonal Filter Bar
         self.osu_filter_bar = QFrame()
@@ -421,7 +412,7 @@ class MainWindow(QMainWindow):
         osu_layout.addWidget(self.osu_sort_combo)
 
         osu_layout.addStretch()
-        main_layout.addWidget(self.osu_filter_bar)
+        self.canvas_vlayout.addWidget(self.osu_filter_bar)
 
         # 2C. MoeWalls (Live Wallpapers) Filter Bar
         self.moe_filter_bar = QFrame()
@@ -458,7 +449,7 @@ class MainWindow(QMainWindow):
         moe_layout.addWidget(moe_badge)
 
         moe_layout.addStretch()
-        main_layout.addWidget(self.moe_filter_bar)
+        self.canvas_vlayout.addWidget(self.moe_filter_bar)
 
         # 2D. Installed Wallpapers Filter Bar
         self.installed_filter_bar = QFrame()
@@ -528,7 +519,7 @@ class MainWindow(QMainWindow):
         inst_layout.addWidget(self.inst_stats_lbl)
 
         inst_layout.addStretch()
-        main_layout.addWidget(self.installed_filter_bar)
+        self.canvas_vlayout.addWidget(self.installed_filter_bar)
 
         # 2E. PFPs (Profile Pictures & Avatars) Filter Bar
         self.pfps_filter_bar = QFrame()
@@ -563,15 +554,15 @@ class MainWindow(QMainWindow):
         pfps_layout.addWidget(pfps_badge)
 
         pfps_layout.addStretch()
-        main_layout.addWidget(self.pfps_filter_bar)
+        self.canvas_vlayout.addWidget(self.pfps_filter_bar)
 
         # 3. Color Bar (Collapsible, Wallhaven only)
         self.color_bar = ColorBar()
         self.color_bar.setVisible(False)
         self.color_bar.color_changed.connect(self._on_color_changed)
-        main_layout.addWidget(self.color_bar)
+        self.canvas_vlayout.addWidget(self.color_bar)
 
-        # 4. Scrollable Wallpaper Grid Area (Smooth Inertial Scrolling)
+        # 4. Scrollable Wallpaper Grid Area with Floating Frosted Pagination
         self.scroll_area = SmoothScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.grid_widget = WallpaperGridWidget()
@@ -584,59 +575,25 @@ class MainWindow(QMainWindow):
         self.grid_widget.pfp_set_avatar_requested.connect(self._on_pfp_set_avatar)
         self.grid_widget.pfp_copy_requested.connect(self._on_pfp_copy)
         self.scroll_area.setWidget(self.grid_widget)
-        main_layout.addWidget(self.scroll_area, stretch=1)
 
-        # 5. Pagination Bar
-        self.pagination_frame = QFrame()
-        self.pagination_frame.setObjectName("paginationFrame")
-        p_layout = QHBoxLayout(self.pagination_frame)
-        p_layout.setContentsMargins(18, 8, 18, 8)
-        p_layout.setSpacing(8)
+        # Floating frosted glass pagination
+        self.pagination = FloatingPagination()
+        self.pagination.page_requested.connect(self.perform_search)
 
-        self.first_btn = QPushButton()
-        self.first_btn.clicked.connect(lambda: self.perform_search(page=1))
-        p_layout.addWidget(self.first_btn)
-
-        self.prev_btn = QPushButton()
-        self.prev_btn.clicked.connect(lambda: self.perform_search(page=self.current_page - 1))
-        p_layout.addWidget(self.prev_btn)
-
-        self.page_info_lbl = QLabel()
-        self.page_info_lbl.setObjectName("pageBadge")
-        self.page_info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_info_lbl.setMinimumWidth(110)
-        p_layout.addWidget(self.page_info_lbl)
-
-        self.next_btn = QPushButton()
-        self.next_btn.clicked.connect(lambda: self.perform_search(page=self.current_page + 1))
-        p_layout.addWidget(self.next_btn)
-
-        self.last_btn = QPushButton()
-        self.last_btn.clicked.connect(lambda: self.perform_search(page=self.last_page))
-        p_layout.addWidget(self.last_btn)
-
-        p_layout.addSpacing(16)
+        # Compatibility aliases
+        self.first_btn = self.pagination.first_btn
+        self.prev_btn = self.pagination.prev_btn
+        self.next_btn = self.pagination.next_btn
+        self.last_btn = self.pagination.last_btn
+        self.page_info_lbl = self.pagination.page_info_btn
+        self.page_spin = self.pagination.jump_spin
+        self.goto_btn = self.pagination.jump_go_btn
         self.goto_lbl = QLabel()
-        self.goto_lbl.setStyleSheet("color: #94a3b8; font-size: 11px;")
-        p_layout.addWidget(self.goto_lbl)
-
-        self.page_spin = QSpinBox()
-        self.page_spin.setRange(1, 9999)
-        self.page_spin.setValue(1)
-        self.page_spin.setFixedWidth(65)
-        p_layout.addWidget(self.page_spin)
-
-        self.goto_btn = QPushButton()
-        self.goto_btn.clicked.connect(lambda: self.perform_search(page=self.page_spin.value()))
-        p_layout.addWidget(self.goto_btn)
-
-        p_layout.addStretch()
-
         self.total_count_lbl = QLabel()
-        self.total_count_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
-        p_layout.addWidget(self.total_count_lbl)
+        self.pagination_frame = self.pagination
 
-        main_layout.addWidget(self.pagination_frame)
+        self.canvas_wrapper = CanvasWrapper(self.scroll_area, self.pagination)
+        self.canvas_vlayout.addWidget(self.canvas_wrapper, stretch=1)
 
         # Status Bar
         self.status_bar = QStatusBar()
@@ -810,11 +767,8 @@ class MainWindow(QMainWindow):
 
     def retranslate_ui(self):
         self.setWindowTitle(tr("app_title"))
-        self.tab_wallhaven.setText(tr("tab_wallhaven"))
-        self.tab_moewalls.setText(tr("tab_moewalls"))
-        self.tab_osu.setText(tr("tab_osu"))
-        self.tab_pfps.setText(tr("tab_pfps"))
-        self.tab_installed.setText(tr("tab_installed"))
+        if hasattr(self, "sidebar"):
+            self.sidebar.retranslate_ui()
 
         if self.current_mode == "osu":
             self.search_input.setPlaceholderText(tr("osu_search_placeholder"))
@@ -865,17 +819,16 @@ class MainWindow(QMainWindow):
         self.pfps_sort_lbl.setText(tr("pfps_sort_label"))
         self._retranslate_pfps_combos()
 
-        if hasattr(self, "nav_capsule"):
+        if hasattr(self, "sidebar"):
+            self.sidebar.retranslate_ui()
+        elif hasattr(self, "nav_capsule"):
             self.nav_capsule.retranslate_ui()
 
         # Pagination
-        self.first_btn.setText(tr("first_page"))
-        self.prev_btn.setText(tr("prev_page"))
-        self.page_info_lbl.setText(tr("page_info", current=self.current_page, last=self.last_page))
-        self.next_btn.setText(tr("next_page"))
-        self.last_btn.setText(tr("last_page"))
-        self.goto_lbl.setText(tr("goto_page"))
-        self.goto_btn.setText(tr("goto_btn"))
+        if hasattr(self, "pagination"):
+            self.pagination.update_pagination(self.current_page, self.last_page, self.total_count)
+            if hasattr(self, "canvas_wrapper"):
+                self.canvas_wrapper.reposition_pagination()
 
         if self.current_mode == "osu":
             self.total_count_lbl.setText(tr("osu_total_found", total=f"{self.total_count:,}"))
@@ -891,7 +844,9 @@ class MainWindow(QMainWindow):
             self.total_count_lbl.setText(tr("total_found", total=f"{self.total_count:,}"))
 
     def _set_mode(self, mode: str):
-        if hasattr(self, "nav_capsule"):
+        if hasattr(self, "sidebar"):
+            self.sidebar.set_mode(mode)
+        elif hasattr(self, "nav_capsule"):
             self.nav_capsule.set_mode(mode)
 
         if mode == self.current_mode:
@@ -1131,10 +1086,14 @@ class MainWindow(QMainWindow):
         # Scroll back to top
         self.scroll_area.verticalScrollBar().setValue(0)
 
-        # Update pagination
-        self.page_info_lbl.setText(tr("page_info", current=self.current_page, last=self.last_page))
-        self.page_spin.setRange(1, self.last_page)
-        self.page_spin.setValue(self.current_page)
+        # Update floating pagination & sidebar counts
+        if hasattr(self, "pagination"):
+            self.pagination.update_pagination(self.current_page, self.last_page, self.total_count)
+            if hasattr(self, "canvas_wrapper"):
+                self.canvas_wrapper.reposition_pagination()
+
+        if self.current_mode == "installed" and hasattr(self, "sidebar"):
+            self.sidebar.set_installed_count(result.total)
 
         if self.current_mode == "osu":
             self.total_count_lbl.setText(tr("osu_total_found", total=f"{result.total:,}"))
@@ -1146,11 +1105,6 @@ class MainWindow(QMainWindow):
             self.inst_stats_lbl.setText(f"💾 {stats['human_size']}")
         else:
             self.total_count_lbl.setText(tr("total_found", total=f"{result.total:,}"))
-
-        self.prev_btn.setEnabled(self.current_page > 1)
-        self.first_btn.setEnabled(self.current_page > 1)
-        self.next_btn.setEnabled(self.current_page < self.last_page)
-        self.last_btn.setEnabled(self.current_page < self.last_page)
 
         self.status_bar.showMessage(tr("status_loaded", count=len(result.items), total=f"{result.total:,}"))
 
@@ -1174,21 +1128,20 @@ class MainWindow(QMainWindow):
         self.grid_widget.set_pfp_items(items)
         self.scroll_area.verticalScrollBar().setValue(0)
 
-        # Update pagination
+        # Update floating pagination
+        if hasattr(self, "pagination"):
+            self.pagination.update_pagination(self.current_page, self.last_page, 0)
+            self.pagination.next_btn.setEnabled(has_next)
+            self.pagination.last_btn.setEnabled(False)
+            if hasattr(self, "canvas_wrapper"):
+                self.canvas_wrapper.reposition_pagination()
+
         is_cs = (i18n.current_language == "cs")
-        self.page_info_lbl.setText(f"Strana {self.current_page}" if is_cs else f"Page {self.current_page}")
-        self.page_spin.setRange(1, 9999)
-        self.page_spin.setValue(self.current_page)
         self.total_count_lbl.setText(
             f"Zobrazeno {len(items)} profilovek (Strana {self.current_page})"
             if is_cs
             else f"Showing {len(items)} avatars (Page {self.current_page})"
         )
-
-        self.prev_btn.setEnabled(self.current_page > 1)
-        self.first_btn.setEnabled(self.current_page > 1)
-        self.next_btn.setEnabled(has_next)
-        self.last_btn.setEnabled(False)
 
         self.status_bar.showMessage(
             f"Načteno {len(items)} profilovek (Strana {self.current_page})"

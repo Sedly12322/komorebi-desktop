@@ -24,7 +24,7 @@ class WallpaperGridWidget(QWidget):
         self.items: list[Any] = []
 
         self.grid_layout = QGridLayout(self)
-        self.grid_layout.setContentsMargins(16, 16, 16, 16)
+        self.grid_layout.setContentsMargins(16, 16, 16, 68)
         self.grid_layout.setSpacing(14)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
@@ -68,6 +68,7 @@ class WallpaperGridWidget(QWidget):
             if hasattr(card, "_cleanup_loader"):
                 card._cleanup_loader()
             self.grid_layout.removeWidget(card)
+            card.setParent(None)
             card.deleteLater()
         self.cards.clear()
         self.items.clear()

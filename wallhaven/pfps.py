@@ -28,6 +28,10 @@ class PfpItem:
     page_url: str = ""
 
     @property
+    def url(self) -> str:
+        return self.image_url
+
+    @property
     def is_animated(self) -> bool:
         return self.format.lower() == "gif" or self.image_url.lower().endswith(".gif")
 

@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QWidget,
     QSizePolicy,
     QGraphicsDropShadowEffect,
 )
@@ -22,9 +23,9 @@ class WallpaperCard(QFrame):
     set_wall_requested = pyqtSignal(WallpaperItem)
 
     CARD_WIDTH = 296
-    CARD_HEIGHT = 226
+    CARD_HEIGHT = 218
     IMAGE_WIDTH = 284
-    IMAGE_HEIGHT = 170
+    IMAGE_HEIGHT = 172
 
     def __init__(self, item: WallpaperItem, parent=None):
         super().__init__(parent)
@@ -50,44 +51,50 @@ class WallpaperCard(QFrame):
         self._load_thumbnail()
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(6)
+        card_layout = QVBoxLayout(self)
+        card_layout.setContentsMargins(6, 6, 6, 6)
+        card_layout.setSpacing(6)
 
         # 1. Image preview with animated skeleton shimmer
-        self.image_label = ShimmerLabel(self, corner_radius=9)
+        self.image_label = ShimmerLabel(self, corner_radius=11)
         self.image_label.setFixedSize(self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
-        layout.addWidget(self.image_label)
 
-        # 2. Bottom info row
-        info_row = QHBoxLayout()
-        info_row.setContentsMargins(4, 0, 4, 2)
-        info_row.setSpacing(6)
+        # In-image overlay layout
+        overlay_layout = QVBoxLayout(self.image_label)
+        overlay_layout.setContentsMargins(8, 8, 8, 8)
+        overlay_layout.setSpacing(0)
 
-        # Live wallpaper indicator
+        # Top row inside image: Format/Live badge (left) & Resolution badge (right)
+        top_badge_row = QHBoxLayout()
+        top_badge_row.setContentsMargins(0, 0, 0, 0)
+        top_badge_row.setSpacing(6)
+
         if getattr(self.item, "is_animated", False):
-            live_badge = QLabel("▶ LIVE")
-            live_badge.setToolTip(tr("card_live_tooltip"))
-            live_badge.setStyleSheet("""
+            self.live_badge = QLabel("▶ LIVE")
+            self.live_badge.setToolTip(tr("card_live_tooltip"))
+            self.live_badge.setStyleSheet("""
                 QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06b6d4, stop:1 #6366f1);
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(6, 182, 212, 0.9), stop:1 rgba(99, 102, 241, 0.9));
                     color: #ffffff;
-                    border-radius: 5px;
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border-radius: 6px;
                     font-weight: 800;
-                    font-size: 10px;
-                    padding: 2px 6px;
+                    font-size: 9.5px;
+                    padding: 2px 7px;
                 }
             """)
-            info_row.addWidget(live_badge)
+            top_badge_row.addWidget(self.live_badge)
 
-        # Resolution badge (4K Gold, 2K Cyan, Standard)
+        top_badge_row.addStretch()
+
+        # Resolution badge (4K Gold, 2K Cyan, Standard Glass)
         is_4k = self.item.dimension_x >= 3840
         is_2k = not is_4k and self.item.dimension_x >= 2560
 
         if is_4k:
-            res_text = "✨ 4K"
+            res_text = "✨ 4K UHD"
         elif is_2k:
-            res_text = "⚡ 2K"
+            res_text = "⚡ 2K QHD"
         else:
             res_text = self.item.resolution
 
@@ -95,30 +102,104 @@ class WallpaperCard(QFrame):
         self.res_badge.setToolTip(f"{self.item.resolution} • {self.item.ratio}")
         if is_4k:
             self.res_badge.setStyleSheet("""
-                background-color: rgba(245, 158, 11, 0.18);
+                background-color: rgba(20, 20, 25, 0.85);
                 color: #fbbf24;
-                border: 1px solid rgba(245, 158, 11, 0.4);
-                border-radius: 5px;
-                padding: 2px 6px;
-                font-size: 10.5px;
-                font-weight: bold;
+                border: 1px solid rgba(245, 158, 11, 0.55);
+                border-radius: 6px;
+                padding: 2px 7px;
+                font-size: 10px;
+                font-weight: 800;
             """)
         elif is_2k:
             self.res_badge.setStyleSheet("""
-                background-color: rgba(56, 189, 248, 0.18);
+                background-color: rgba(20, 20, 25, 0.85);
                 color: #38bdf8;
-                border: 1px solid rgba(56, 189, 248, 0.4);
-                border-radius: 5px;
-                padding: 2px 6px;
-                font-size: 10.5px;
-                font-weight: bold;
+                border: 1px solid rgba(56, 189, 248, 0.55);
+                border-radius: 6px;
+                padding: 2px 7px;
+                font-size: 10px;
+                font-weight: 800;
             """)
         else:
-            self.res_badge.setObjectName("badge")
-        info_row.addWidget(self.res_badge)
+            self.res_badge.setStyleSheet("""
+                background-color: rgba(15, 18, 28, 0.82);
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 6px;
+                padding: 2px 6px;
+                font-size: 9.5px;
+                font-weight: 700;
+            """)
+        top_badge_row.addWidget(self.res_badge)
+        overlay_layout.addLayout(top_badge_row)
+
+        overlay_layout.addStretch()
+
+        # Center/Bottom Floating Action Buttons (revealed on hover)
+        self.hover_bar = QWidget(self.image_label)
+        self.hover_bar.setVisible(False)
+        hover_layout = QHBoxLayout(self.hover_bar)
+        hover_layout.setContentsMargins(0, 0, 0, 4)
+        hover_layout.setSpacing(10)
+        hover_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        is_installed = getattr(self.item, "is_installed", False)
+
+        if is_installed:
+            # Set wallpaper button
+            self.set_wall_btn = QPushButton("🖼️")
+            self.set_wall_btn.setFixedSize(34, 34)
+            self.set_wall_btn.setToolTip(tr("card_set_wall_tooltip"))
+            self.set_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.set_wall_btn.setStyleSheet(self._action_btn_style("#10b981", "#059669"))
+            self.set_wall_btn.clicked.connect(lambda: self.set_wall_requested.emit(self.item))
+            hover_layout.addWidget(self.set_wall_btn)
+
+            # Delete / Uninstall button
+            self.uninstall_btn = QPushButton("🗑️")
+            self.uninstall_btn.setFixedSize(34, 34)
+            self.uninstall_btn.setToolTip(tr("card_uninstall_tooltip"))
+            self.uninstall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.uninstall_btn.setStyleSheet(self._action_btn_style("#ef4444", "#dc2626"))
+            self.uninstall_btn.clicked.connect(lambda: self.uninstall_requested.emit(self.item))
+            hover_layout.addWidget(self.uninstall_btn)
+        else:
+            # Quick download button
+            self.dl_btn = QPushButton("⬇")
+            self.dl_btn.setFixedSize(34, 34)
+            self.dl_btn.setToolTip(tr("card_download_tooltip"))
+            self.dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.dl_btn.setStyleSheet(self._action_btn_style("#6366f1", "#4f46e5"))
+            self.dl_btn.clicked.connect(self._on_download_clicked)
+            hover_layout.addWidget(self.dl_btn)
+
+            # Quick set wallpaper button
+            self.set_wall_btn = QPushButton("🖼️")
+            self.set_wall_btn.setFixedSize(34, 34)
+            self.set_wall_btn.setToolTip(tr("card_set_wall_tooltip"))
+            self.set_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.set_wall_btn.setStyleSheet(self._action_btn_style("#0ea5e9", "#0284c7"))
+            self.set_wall_btn.clicked.connect(lambda: self.set_wall_requested.emit(self.item))
+            hover_layout.addWidget(self.set_wall_btn)
+
+        # Quick view details button
+        self.view_btn = QPushButton("🔍")
+        self.view_btn.setFixedSize(34, 34)
+        self.view_btn.setToolTip("Zobrazit detaily a plné rozlišení")
+        self.view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.view_btn.setStyleSheet(self._action_btn_style("#64748b", "#475569"))
+        self.view_btn.clicked.connect(lambda: self.clicked.emit(self.item))
+        hover_layout.addWidget(self.view_btn)
+
+        overlay_layout.addWidget(self.hover_bar)
+        card_layout.addWidget(self.image_label)
+
+        # 2. Bottom info row (Metadata, Category, Purity, Favorites)
+        info_row = QHBoxLayout()
+        info_row.setContentsMargins(4, 0, 4, 2)
+        info_row.setSpacing(6)
 
         # Category badge
-        is_installed = getattr(self.item, "is_installed", False)
         if is_installed:
             cat_badge = QLabel(self.item.source or "Installed")
             tooltip_text = f"{getattr(self.item, '_display_title', self.item.id)}\n{self.item.resolution} • {self.item.human_file_size}"
@@ -147,7 +228,7 @@ class WallpaperCard(QFrame):
                 color: white;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 10px;
+                font-size: 9.5px;
                 padding: 1px 5px;
             """)
             info_row.addWidget(purity_lbl)
@@ -158,7 +239,7 @@ class WallpaperCard(QFrame):
                 color: white;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 10px;
+                font-size: 9.5px;
                 padding: 1px 5px;
             """)
             info_row.addWidget(purity_lbl)
@@ -167,75 +248,28 @@ class WallpaperCard(QFrame):
 
         # Favorites count
         if self.item.favorites > 0:
-            fav_lbl = QLabel(f"★ {self.item.favorites}")
-            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 600;")
+            fav_lbl = QLabel(f"★ {self.item.favorites:,}")
+            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 700;")
             info_row.addWidget(fav_lbl)
 
-        # Action Buttons
-        if is_installed:
-            self.set_wall_btn = QPushButton("🖼️")
-            self.set_wall_btn.setFixedSize(28, 26)
-            self.set_wall_btn.setToolTip(tr("card_set_wall_tooltip"))
-            self.set_wall_btn.setStyleSheet("""
-                QPushButton {
-                    background: #059669;
-                    color: #ffffff;
-                    border: 1px solid #10b981;
-                    border-radius: 6px;
-                    font-size: 12px;
-                    padding: 0;
-                }
-                QPushButton:hover {
-                    background: #10b981;
-                }
-            """)
-            self.set_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.set_wall_btn.clicked.connect(lambda: self.set_wall_requested.emit(self.item))
-            info_row.addWidget(self.set_wall_btn)
+        card_layout.addLayout(info_row)
 
-            self.uninstall_btn = QPushButton("🗑️")
-            self.uninstall_btn.setFixedSize(28, 26)
-            self.uninstall_btn.setToolTip(tr("card_uninstall_tooltip"))
-            self.uninstall_btn.setStyleSheet("""
-                QPushButton {
-                    background: #dc2626;
-                    color: #ffffff;
-                    border: 1px solid #ef4444;
-                    border-radius: 6px;
-                    font-size: 12px;
-                    padding: 0;
-                }
-                QPushButton:hover {
-                    background: #ef4444;
-                }
-            """)
-            self.uninstall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.uninstall_btn.clicked.connect(lambda: self.uninstall_requested.emit(self.item))
-            info_row.addWidget(self.uninstall_btn)
-        else:
-            self.dl_btn = QPushButton("⬇")
-            self.dl_btn.setFixedSize(28, 26)
-            self.dl_btn.setToolTip(tr("card_download_tooltip"))
-            self.dl_btn.setStyleSheet("""
-                QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
-                    color: #ffffff;
-                    border: 1px solid #818cf8;
-                    border-radius: 6px;
-                    font-size: 12px;
-                    font-weight: bold;
-                    padding: 0;
-                }
-                QPushButton:hover {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
-                    border-color: #a5b4fc;
-                }
-            """)
-            self.dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.dl_btn.clicked.connect(self._on_download_clicked)
-            info_row.addWidget(self.dl_btn)
-
-        layout.addLayout(info_row)
+    def _action_btn_style(self, bg_hover: str, border_hover: str) -> str:
+        return f"""
+            QPushButton {{
+                background-color: rgba(15, 23, 42, 0.88);
+                color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 17px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background-color: {bg_hover};
+                border-color: {border_hover};
+            }}
+        """
 
     def _load_thumbnail(self):
         if not self._thumb_url:
@@ -243,21 +277,21 @@ class WallpaperCard(QFrame):
             return
 
         target_size = (self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
-        # Ultra-fast path: checks pre-scaled memory cache and dispatches without UI thread scaling
         loader.load_thumbnail(
             self._thumb_url,
             target_size=target_size,
-            radius=8,
+            radius=11,
             callback=self._set_pixmap_instant
         )
 
     def _set_pixmap_instant(self, pixmap: QPixmap):
-        """Called directly when pre-scaled rounded pixmap is ready."""
         self._pixmap = pixmap
         self.image_label.set_loaded_pixmap(pixmap, animate=True)
 
     def enterEvent(self, event):
         super().enterEvent(event)
+        self.hover_bar.setVisible(True)
+
         # Animate drop shadow bloom on hover
         self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
         self._anim_blur.setDuration(180)
@@ -269,12 +303,14 @@ class WallpaperCard(QFrame):
         self._anim_offset.setEndValue(7.0)
         self._anim_offset.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-        self._shadow.setColor(QColor(99, 102, 241, 100))
+        self._shadow.setColor(QColor(99, 102, 241, 110))
         self._anim_blur.start()
         self._anim_offset.start()
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
+        self.hover_bar.setVisible(False)
+
         self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
         self._anim_blur.setDuration(180)
         self._anim_blur.setEndValue(10.0)
@@ -302,14 +338,18 @@ class WallpaperCard(QFrame):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            # Only trigger card click if not clicking directly on action buttons
             pos = event.pos()
             btn_clicked = False
-            if hasattr(self, "dl_btn") and self.dl_btn.geometry().contains(pos):
-                btn_clicked = True
-            elif hasattr(self, "set_wall_btn") and self.set_wall_btn.geometry().contains(pos):
-                btn_clicked = True
-            elif hasattr(self, "uninstall_btn") and self.uninstall_btn.geometry().contains(pos):
-                btn_clicked = True
+            for btn_name in ("dl_btn", "set_wall_btn", "uninstall_btn", "view_btn"):
+                if hasattr(self, btn_name):
+                    btn = getattr(self, btn_name)
+                    # Map position to card coords
+                    btn_card_pos = btn.mapTo(self, btn.rect().topLeft())
+                    btn_rect = btn.rect().translated(btn_card_pos)
+                    if btn_rect.contains(pos):
+                        btn_clicked = True
+                        break
 
             if not btn_clicked:
                 self.clicked.emit(self.item)

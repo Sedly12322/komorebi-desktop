@@ -808,6 +808,51 @@ QWidget {
     font-size: 13px;
 }
 
+/* Sidebar & Modern Layout */
+QFrame#komorebiSidebar {
+    background-color: %(bg_surface)s;
+    border-right: 1px solid %(border_subtle)s;
+}
+
+QPushButton#sidebarUtilityBtn {
+    background-color: transparent;
+    color: %(text_secondary)s;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    text-align: left;
+    padding-left: 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+QPushButton#sidebarUtilityBtn:hover {
+    background-color: %(bg_input_hover)s;
+    color: %(text_primary)s;
+}
+
+/* Spotlight Canvas Top Bar */
+QFrame#spotlightBar {
+    background-color: %(bg_surface)s;
+    border-bottom: 1px solid %(border_subtle)s;
+    padding: 10px 18px;
+}
+
+QLineEdit#spotlightInput {
+    background-color: %(bg_input)s;
+    color: %(text_primary)s;
+    border: 1.5px solid %(border)s;
+    border-radius: 12px;
+    padding: 6px 14px;
+    font-size: 13px;
+    selection-background-color: %(accent)s;
+}
+
+QLineEdit#spotlightInput:focus {
+    border: 1.5px solid %(accent)s;
+    background-color: %(bg_input_hover)s;
+    color: %(text_primary)s;
+}
+
 /* Header & Filter Panels */
 QFrame#headerPanel {
     background-color: %(bg_surface)s;
