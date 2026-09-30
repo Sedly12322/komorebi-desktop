@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect,
 )
 from wallhaven.pfps import PfpItem, pfps_client
+from wallhaven.cache import cache
 from wallhaven.image_loader import loader
 from wallhaven.i18n import tr
 from wallhaven.widgets.shimmer import ShimmerLabel
@@ -193,10 +194,13 @@ class PfpCard(QFrame):
 
         # If it's a GIF, check if local file is already cached so we can play preview on hover
         if self.item.is_animated:
-            cached_path = loader.get_cache_path(self.item.url)
-            if cached_path and cached_path.exists():
-                self._movie = QMovie(str(cached_path))
-                self._movie.setScaledSize(QSize(self.IMAGE_SIZE, self.IMAGE_SIZE))
+            try:
+                cached_path = cache.get_cached_path(self.item.url, is_thumb=True)
+                if cached_path and cached_path.exists():
+                    self._movie = QMovie(str(cached_path))
+                    self._movie.setScaledSize(QSize(self.IMAGE_SIZE, self.IMAGE_SIZE))
+            except Exception:
+                pass
 
     def _format_downloads(self, count) -> str:
         if isinstance(count, str):

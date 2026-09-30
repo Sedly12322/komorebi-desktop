@@ -151,6 +151,9 @@ class AsyncImageLoader(QObject):
         self._pending_urls: set[str] = set()
         self._callbacks: dict[str, list[Callable[[QPixmap], None]]] = {}
 
+    def get_cache_path(self, url: str, is_thumb: bool = True):
+        return self.cache.get_cached_path(url, is_thumb)
+
     def load_thumbnail(
         self,
         url: str,

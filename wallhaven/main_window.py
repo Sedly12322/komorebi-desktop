@@ -1158,6 +1158,9 @@ class MainWindow(QMainWindow):
         )
 
     def _on_card_clicked(self, item: WallpaperItem):
+        if isinstance(item, PfpItem):
+            self._on_pfp_clicked(item)
+            return
         dlg = DetailDialog(item, self)
         dlg.tag_clicked.connect(self._search_by_tag)
         dlg.download_completed.connect(lambda p: self._on_download_completed(p, item))
@@ -1297,6 +1300,9 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
 
     def _on_pfp_clicked(self, item: PfpItem):
+        if not isinstance(item, PfpItem):
+            self._on_card_clicked(item)
+            return
         dlg = PfpDetailDialog(item, self)
         dlg.exec()
 
