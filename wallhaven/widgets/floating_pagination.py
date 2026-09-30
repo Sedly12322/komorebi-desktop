@@ -174,6 +174,10 @@ class FloatingPagination(QFrame):
         self.total_count = 0
         self.item_type = "wallpapers"
 
+        # Compatibility dummies
+        self.jump_spin = None
+        self.jump_go_btn = None
+
         # Elevation drop shadow
         self._shadow = QGraphicsDropShadowEffect(self)
         self._shadow.setBlurRadius(20)
