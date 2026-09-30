@@ -25,6 +25,39 @@ _ASSETS_DIR = Path(__file__).parent.parent / "assets"
 _CHEVRON_NORMAL = str(_ASSETS_DIR / "chevron_down.png").replace("\\", "/")
 _CHEVRON_HOVER = str(_ASSETS_DIR / "chevron_down_hover.png").replace("\\", "/")
 
+
+def get_asset_path(filename: str) -> Path:
+    """Finds an asset across bundled environments, local paths, and system icon directories."""
+    # 1. PyInstaller bundle
+    if hasattr(sys, "_MEIPASS"):
+        b1 = Path(sys._MEIPASS) / "assets" / filename
+        if b1.exists():
+            return b1
+        b2 = Path(sys._MEIPASS) / filename
+        if b2.exists():
+            return b2
+
+    # 2. Alongside executable
+    exe_dir = Path(sys.executable).parent / "assets" / filename
+    if exe_dir.exists():
+        return exe_dir
+
+    # 3. Source assets directory
+    pkg_asset = _ASSETS_DIR / filename
+    if pkg_asset.exists():
+        return pkg_asset
+
+    # 4. Linux system icon paths
+    sys_asset = Path(f"/usr/share/icons/hicolor/256x256/apps/{filename}")
+    if sys_asset.exists():
+        return sys_asset
+    local_asset = Path.home() / f".local/share/icons/hicolor/256x256/apps/{filename}"
+    if local_asset.exists():
+        return local_asset
+
+    return pkg_asset
+
+
 # Curated theme palettes
 THEME_PALETTES: Dict[str, Dict[str, str]] = {
     "dark": {

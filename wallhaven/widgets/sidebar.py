@@ -24,6 +24,7 @@ from PyQt6.QtGui import (
     QFont,
     QPen,
     QCursor,
+    QPixmap,
 )
 from PyQt6.QtWidgets import (
     QWidget,
@@ -37,7 +38,7 @@ from PyQt6.QtWidgets import (
 )
 from wallhaven.i18n import tr
 from wallhaven.config import config
-from wallhaven.styles import get_available_themes, apply_theme, get_palette
+from wallhaven.styles import get_available_themes, apply_theme, get_palette, get_asset_path
 
 
 class SidebarNavItem(QPushButton):
@@ -383,14 +384,29 @@ class KomorebiSidebar(QFrame):
         brand_layout.setContentsMargins(8, 6, 8, 10)
         brand_layout.setSpacing(10)
 
-        # Glowing emblem icon
-        emblem_lbl = QLabel("🌿")
+        # Glowing emblem icon using official app emblem asset
+        emblem_lbl = QLabel()
+        emblem_lbl.setFixedSize(36, 36)
+        emblem_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        emblem_path = get_asset_path("icon_emblem.png")
+        if not emblem_path.exists():
+            emblem_path = get_asset_path("icon.png")
+        if emblem_path.exists():
+            pm = QPixmap(str(emblem_path)).scaled(
+                28,
+                28,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            emblem_lbl.setPixmap(pm)
+        else:
+            emblem_lbl.setText("🌿")
+
         emblem_lbl.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(99, 102, 241, 0.3), stop:1 rgba(168, 85, 247, 0.3));
-            border: 1px solid rgba(168, 85, 247, 0.4);
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(234, 179, 8, 0.15), stop:1 rgba(99, 102, 241, 0.2));
+            border: 1px solid rgba(234, 179, 8, 0.35);
             border-radius: 10px;
-            padding: 5px;
-            font-size: 18px;
+            padding: 3px;
         """)
         brand_layout.addWidget(emblem_lbl)
 
@@ -504,7 +520,7 @@ class KomorebiSidebar(QFrame):
 
     def _update_auto_wall_btn_style(self):
         if self.auto_wall_btn.isChecked():
-            self.auto_wall_btn.setText("🖼️  Auto-tapeta  •  ZAP")
+            self.auto_wall_btn.setText(f"🖼️  {tr('auto_wall_on')}")
             self.auto_wall_btn.setStyleSheet("""
                 QPushButton {
                     background-color: rgba(16, 185, 129, 0.12);
@@ -521,7 +537,7 @@ class KomorebiSidebar(QFrame):
                 }
             """)
         else:
-            self.auto_wall_btn.setText("🖼️  Auto-tapeta  •  VYP")
+            self.auto_wall_btn.setText(f"🖼️  {tr('auto_wall_off')}")
             self.auto_wall_btn.setStyleSheet("""
                 QPushButton {
                     background-color: transparent;
@@ -555,39 +571,48 @@ class KomorebiSidebar(QFrame):
             "pywal": "Pywal",
         }
         short_name = theme_names.get(theme_id, theme_id.capitalize())
-        theme_label = tr("theme_menu_title") or "Téma"
+        theme_label = tr("theme_menu_title") or "Theme"
         self.theme_btn.setText(f"🎨  {theme_label}: {short_name}")
         self.nav_container.update()
 
     def retranslate_ui(self):
         if hasattr(self, "nav_container"):
+            if hasattr(self.nav_container, "section_explore_lbl"):
+                exp_text = tr("nav_explore") or "Explore"
+                self.nav_container.section_explore_lbl.setText(exp_text.upper())
+            if hasattr(self.nav_container, "section_lib_lbl"):
+                lib_text = tr("nav_library") or "Library"
+                self.nav_container.section_lib_lbl.setText(lib_text.upper())
+
             if "wallhaven" in self.nav_container.buttons:
                 self.nav_container.buttons["wallhaven"].update_texts(
                     tr("tab_wallhaven"),
-                    tr("sidebar_wallhaven_sub") or "HD & 4K tapety",
+                    tr("sidebar_wallhaven_sub") or "HD & 4K Wallpapers",
                 )
             if "moewalls" in self.nav_container.buttons:
                 self.nav_container.buttons["moewalls"].update_texts(
                     tr("tab_moewalls"),
-                    tr("sidebar_moewalls_sub") or "Živé video tapety",
+                    tr("sidebar_moewalls_sub") or "Live Video Wallpapers",
                 )
             if "osu" in self.nav_container.buttons:
                 self.nav_container.buttons["osu"].update_texts(
                     tr("tab_osu"),
-                    tr("sidebar_osu_sub") or "Soutěžní ilustrace",
+                    tr("sidebar_osu_sub") or "Contest Artworks",
                 )
             if "pfps" in self.nav_container.buttons:
                 self.nav_container.buttons["pfps"].update_texts(
                     tr("tab_pfps"),
-                    tr("sidebar_pfps_sub") or "pfps.gg & GIFy",
+                    tr("sidebar_pfps_sub") or "pfps.gg & GIFs",
                 )
             if "installed" in self.nav_container.buttons:
                 self.nav_container.buttons["installed"].update_texts(
                     tr("tab_installed"),
-                    tr("sidebar_installed_sub") or "Nainstalované tapety",
+                    tr("sidebar_installed_sub") or "Installed Wallpapers",
                 )
 
         if hasattr(self, "theme_btn"):
             self.update_theme_display()
+        if hasattr(self, "auto_wall_btn"):
+            self._update_auto_wall_btn_style()
         if hasattr(self, "settings_btn"):
-            self.settings_btn.setText(f"⚙️  {tr('settings_title') or 'Nastavení'}")
+            self.settings_btn.setText(f"⚙️  {tr('settings_title') or 'Settings'}")

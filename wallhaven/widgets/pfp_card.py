@@ -108,7 +108,7 @@ class PfpCard(QFrame):
 
         # Copy button (Ctrl+C / Discord paste)
         self.copy_btn = QPushButton("📋")
-        self.copy_btn.setToolTip("Zkopírovat do schránky (Ctrl+V)")
+        self.copy_btn.setToolTip(tr("pfp_copy_tip"))
         self.copy_btn.setFixedSize(32, 32)
         self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_btn.setStyleSheet(self._action_btn_style("#3b82f6", "#60a5fa"))
@@ -117,7 +117,7 @@ class PfpCard(QFrame):
 
         # Set as avatar button
         self.set_btn = QPushButton("👤")
-        self.set_btn.setToolTip("Nastavit jako profilovku systému")
+        self.set_btn.setToolTip(tr("pfp_set_avatar_tip"))
         self.set_btn.setFixedSize(32, 32)
         self.set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.set_btn.setStyleSheet(self._action_btn_style("#8b5cf6", "#c4b5fd"))
@@ -126,7 +126,7 @@ class PfpCard(QFrame):
 
         # Download button
         self.dl_btn = QPushButton("⬇")
-        self.dl_btn.setToolTip("Stáhnout do složky Avatary")
+        self.dl_btn.setToolTip(tr("pfp_download_tip"))
         self.dl_btn.setFixedSize(32, 32)
         self.dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dl_btn.setStyleSheet(self._action_btn_style("#10b981", "#34d399"))
@@ -135,7 +135,7 @@ class PfpCard(QFrame):
 
         # Detail view button
         self.view_btn = QPushButton("🔍")
-        self.view_btn.setToolTip("Zobrazit detail")
+        self.view_btn.setToolTip(tr("pfp_view_detail_tip"))
         self.view_btn.setFixedSize(32, 32)
         self.view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.view_btn.setStyleSheet(self._action_btn_style("#64748b", "#94a3b8"))

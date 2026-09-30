@@ -49,7 +49,7 @@ class PfpDetailDialog(QDialog):
         title_lbl.setWordWrap(True)
         header_row.addWidget(title_lbl, 1)
 
-        fmt_text = "🎞️ GIF (Animovaný)" if self.item.is_animated else f"🖼️ {self.item.format.upper()}"
+        fmt_text = "🎞️ GIF" if self.item.is_animated else f"🖼️ {self.item.format.upper()}"
         fmt_badge = QLabel(fmt_text)
         fmt_badge.setStyleSheet("""
             background: #1e2434;
@@ -99,7 +99,7 @@ class PfpDetailDialog(QDialog):
         preview_layout = QVBoxLayout(self.preview_frame)
         preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.preview_label = QLabel("⏳ Načítám avatar...")
+        self.preview_label = QLabel(tr("pfp_loading"))
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 600;")
         self.preview_label.setFixedSize(340, 340)
@@ -111,14 +111,14 @@ class PfpDetailDialog(QDialog):
         meta_row = QHBoxLayout()
         meta_row.setSpacing(12)
 
-        dl_lbl = QLabel(f"⬇ {self.item.downloads} stažení")
+        dl_lbl = QLabel(f"⬇ {self.item.downloads:,} {tr('pfp_downloads_suffix')}")
         dl_lbl.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
         meta_row.addWidget(dl_lbl)
 
         meta_row.addStretch()
 
         web_btn = QPushButton("🌐 pfps.gg")
-        web_btn.setToolTip("Otevřít stránku profilovky v prohlížeči")
+        web_btn.setToolTip(tr("pfp_open_web_tip"))
         web_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         web_btn.setStyleSheet("""
             QPushButton {
@@ -143,7 +143,7 @@ class PfpDetailDialog(QDialog):
         action_row.setSpacing(10)
 
         # Set System Avatar button
-        self.set_avatar_btn = QPushButton("👤 Nastavit profilovku")
+        self.set_avatar_btn = QPushButton(tr("pfp_btn_set_avatar"))
         self.set_avatar_btn.setFixedHeight(38)
         self.set_avatar_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.set_avatar_btn.setStyleSheet("""
@@ -163,9 +163,9 @@ class PfpDetailDialog(QDialog):
         action_row.addWidget(self.set_avatar_btn)
 
         # Copy button
-        self.copy_btn = QPushButton("📋 Zkopírovat")
+        self.copy_btn = QPushButton(tr("pfp_btn_copy"))
         self.copy_btn.setFixedHeight(38)
-        self.copy_btn.setToolTip("Zkopírovat obrázek do schránky (vložení Ctrl+V do Discordu)")
+        self.copy_btn.setToolTip(tr("pfp_copy_tip"))
         self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_btn.setStyleSheet("""
             QPushButton {
@@ -186,8 +186,9 @@ class PfpDetailDialog(QDialog):
         action_row.addWidget(self.copy_btn)
 
         # Download button
-        self.download_btn = QPushButton("💾 Stáhnout")
+        self.download_btn = QPushButton(tr("pfp_btn_download"))
         self.download_btn.setFixedHeight(38)
+        self.download_btn.setToolTip(tr("pfp_download_tip"))
         self.download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.download_btn.setStyleSheet("""
             QPushButton {
@@ -221,7 +222,7 @@ class PfpDetailDialog(QDialog):
                 with urllib.request.urlopen(req, timeout=15) as resp, open(local_path, "wb") as f:
                     f.write(resp.read())
             except Exception as e:
-                self.preview_label.setText(f"Chyba stahování: {e}")
+                self.preview_label.setText(tr("pfp_avatar_download_failed", error=str(e)))
                 return
 
         self._local_file = str(local_path)
@@ -248,33 +249,33 @@ class PfpDetailDialog(QDialog):
     def _on_copy_clipboard(self):
         if self._pixmap and not self._pixmap.isNull():
             pfps_client.copy_image_to_clipboard(self._pixmap)
-            self.copy_btn.setText("✓ Zkopírováno!")
+            self.copy_btn.setText(tr("pfp_copied"))
         elif self._local_file and os.path.exists(self._local_file):
             pix = QPixmap(self._local_file)
             pfps_client.copy_image_to_clipboard(pix)
-            self.copy_btn.setText("✓ Zkopírováno!")
+            self.copy_btn.setText(tr("pfp_copied"))
 
     def _on_set_system_avatar(self):
         ok, msg = pfps_client.set_system_avatar(self.item, self._local_file)
         if ok:
-            self.set_avatar_btn.setText("✓ Profilovka nastavena!")
+            self.set_avatar_btn.setText(tr("pfp_avatar_set"))
             self.set_avatar_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
-            QMessageBox.information(self, "Profilovka změněna", msg)
+            QMessageBox.information(self, tr("pfp_avatar_changed_title"), msg)
         else:
-            QMessageBox.warning(self, "Chyba", msg)
+            QMessageBox.warning(self, tr("pfp_avatar_error_title"), msg)
 
     def _on_download(self):
         ok, path_or_err = pfps_client.download_pfp(self.item)
         if ok:
-            self.download_btn.setText("✓ Uloženo!")
+            self.download_btn.setText(tr("pfp_downloaded"))
             self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
             QMessageBox.information(
                 self,
-                "Profilovka uložena",
-                f"Profilovka byla úspěšně stažena do:\n{path_or_err}",
+                tr("pfp_avatar_saved_title"),
+                tr("pfp_avatar_saved_msg", path=path_or_err),
             )
         else:
-            QMessageBox.critical(self, "Chyba", f"Stahování selhalo:\n{path_or_err}")
+            QMessageBox.critical(self, tr("pfp_download_error_title"), tr("pfp_download_error_msg", error=path_or_err))
 
     def _open_webpage(self):
         if self.item.page_url:

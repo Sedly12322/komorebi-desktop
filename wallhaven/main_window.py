@@ -42,7 +42,7 @@ from wallhaven.widgets.ambient_background import KomorebiAmbientCanvas
 from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
-from wallhaven.styles import get_available_themes, apply_theme, get_palette
+from wallhaven.styles import get_available_themes, apply_theme, get_palette, get_asset_path
 
 
 class SearchWorker(QThread):
@@ -136,6 +136,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.resize(1280, 800)
         self.setMinimumSize(900, 600)
+
+        # Set window icon
+        icon_name = "icon.ico" if sys.platform == "win32" else "icon.png"
+        icon_path = get_asset_path(icon_name)
+        if not icon_path.exists():
+            icon_path = get_asset_path("icon.png")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         self.current_mode = "wallhaven"
         self.osu_theme = "all"
@@ -591,8 +599,6 @@ class MainWindow(QMainWindow):
         self.next_btn = self.pagination.next_btn
         self.last_btn = self.pagination.last_btn
         self.page_info_lbl = self.pagination.page_info_btn
-        self.page_spin = self.pagination.jump_spin
-        self.goto_btn = self.pagination.jump_go_btn
         self.goto_lbl = QLabel()
         self.total_count_lbl = QLabel()
         self.pagination_frame = self.pagination
@@ -831,7 +837,9 @@ class MainWindow(QMainWindow):
 
         # Pagination
         if hasattr(self, "pagination"):
-            self.pagination.update_pagination(self.current_page, self.last_page, self.total_count)
+            item_type = "avatars" if self.current_mode == "pfps" else "wallpapers"
+            self.pagination.update_pagination(self.current_page, self.last_page, self.total_count, item_type=item_type)
+            self.pagination.retranslate_ui()
             if hasattr(self, "canvas_wrapper"):
                 self.canvas_wrapper.reposition_pagination()
 
@@ -844,7 +852,7 @@ class MainWindow(QMainWindow):
             self.total_count_lbl.setText(tr("installed_total_found", total=f"{self.total_count:,}", size=stats["human_size"]))
             self.inst_stats_lbl.setText(f"💾 {stats['human_size']}")
         elif self.current_mode == "pfps":
-            self.total_count_lbl.setText(f"Nalezeno {self.total_count} profilovek (Strana {self.current_page})")
+            self.total_count_lbl.setText(tr("pfps_showing_count", count=self.total_count, page=self.current_page))
         else:
             self.total_count_lbl.setText(tr("total_found", total=f"{self.total_count:,}"))
 
@@ -1141,24 +1149,14 @@ class MainWindow(QMainWindow):
 
         # Update floating pagination
         if hasattr(self, "pagination"):
-            self.pagination.update_pagination(self.current_page, self.last_page, 0)
+            self.pagination.update_pagination(self.current_page, self.last_page, 0, item_type="avatars")
             self.pagination.next_btn.setEnabled(has_next)
             self.pagination.last_btn.setEnabled(False)
             if hasattr(self, "canvas_wrapper"):
                 self.canvas_wrapper.reposition_pagination()
 
-        is_cs = (i18n.current_language == "cs")
-        self.total_count_lbl.setText(
-            f"Zobrazeno {len(items)} profilovek (Strana {self.current_page})"
-            if is_cs
-            else f"Showing {len(items)} avatars (Page {self.current_page})"
-        )
-
-        self.status_bar.showMessage(
-            f"Načteno {len(items)} profilovek (Strana {self.current_page})"
-            if is_cs
-            else f"Loaded {len(items)} avatars (Page {self.current_page})"
-        )
+        self.total_count_lbl.setText(tr("pfps_showing_count", count=len(items), page=self.current_page))
+        self.status_bar.showMessage(tr("pfps_loaded_status", count=len(items), page=self.current_page))
 
     def _on_card_clicked(self, item: WallpaperItem):
         if isinstance(item, PfpItem):
@@ -1242,15 +1240,15 @@ class MainWindow(QMainWindow):
             if ok:
                 self.status_bar.showMessage(tr("status_download_done_wall", filename=filename), 8000)
                 if hasattr(self, "toast"):
-                    self.toast.show_message(f"Tapeta nastavena na plochu: {filename}", icon="🖼️")
+                    self.toast.show_message(tr("toast_wall_set", filename=filename), icon="🖼️")
             else:
                 self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
                 if hasattr(self, "toast"):
-                    self.toast.show_message(f"Tapeta uložena: {filename}", icon="💾")
+                    self.toast.show_message(tr("toast_wall_saved", filename=filename), icon="💾")
         else:
             self.status_bar.showMessage(tr("status_download_done", filename=filename), 8000)
             if hasattr(self, "toast"):
-                self.toast.show_message(f"Tapeta uložena: {filename}", icon="💾")
+                self.toast.show_message(tr("toast_wall_saved", filename=filename), icon="💾")
 
     def _open_installed_folder(self):
         folder = config.default_download_dir
@@ -1277,7 +1275,7 @@ class MainWindow(QMainWindow):
             if ok:
                 self.status_bar.showMessage(tr("status_uninstalled", title=title), 6000)
                 if hasattr(self, "toast"):
-                    self.toast.show_message(f"Tapeta odinstalována: {title}", icon="🗑️")
+                    self.toast.show_message(tr("toast_wall_uninstalled", title=title), icon="🗑️")
                 self.perform_search(page=self.current_page)
             else:
                 QMessageBox.critical(self, tr("uninstall_error_title"), tr("uninstall_error_msg", error=err))
@@ -1298,7 +1296,7 @@ class MainWindow(QMainWindow):
         if ok:
             self.status_bar.showMessage(tr("status_download_done_wall", filename=filename), 8000)
             if hasattr(self, "toast"):
-                self.toast.show_message(f"Tapeta nastavena: {filename}", icon="🖼️")
+                self.toast.show_message(tr("toast_wall_set", filename=filename), icon="🖼️")
         else:
             self.status_bar.showMessage(tr("status_download_fail_wall", filename=filename, error=msg), 8000)
 
@@ -1310,57 +1308,42 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _on_pfp_download(self, item: PfpItem):
-        is_cs = (i18n.current_language == "cs")
-        self.status_bar.showMessage(
-            f"Stahuji profilovku {item.title}..." if is_cs else f"Downloading avatar {item.title}..."
-        )
+        self.status_bar.showMessage(tr("pfp_downloading_status", title=item.title))
         ok, res = pfps_client.download_pfp(item)
         if ok:
-            self.status_bar.showMessage(
-                f"Profilovka uložena do {res}" if is_cs else f"Avatar saved to {res}",
-                8000,
-            )
+            self.status_bar.showMessage(tr("pfp_saved_status", path=res), 8000)
             if hasattr(self, "toast"):
-                self.toast.show_message(f"Profilovka uložena do: {os.path.basename(res)}", icon="💾")
+                self.toast.show_message(tr("toast_pfp_saved", filename=os.path.basename(res)), icon="💾")
         else:
             QMessageBox.critical(
                 self,
-                "Chyba stahování" if is_cs else "Download Error",
-                f"Stahování profilovky selhalo:\n{res}" if is_cs else f"Avatar download failed:\n{res}",
+                tr("pfp_download_error_title"),
+                tr("pfp_download_error_msg", error=res),
             )
 
     def _on_pfp_set_avatar(self, item: PfpItem):
-        is_cs = (i18n.current_language == "cs")
-        self.status_bar.showMessage(
-            f"Nastavuji profilovku systému pro {item.title}..." if is_cs else f"Setting system avatar {item.title}..."
-        )
+        self.status_bar.showMessage(tr("pfp_setting_avatar_status", title=item.title))
         ok, msg = pfps_client.set_system_avatar(item)
         if ok:
             self.status_bar.showMessage(f"✓ {msg}", 8000)
             if hasattr(self, "toast"):
-                self.toast.show_message("Profilovka byla úspěšně nastavena do systému!", icon="👤")
+                self.toast.show_message(tr("toast_pfp_avatar_set"), icon="👤")
             QMessageBox.information(
                 self,
-                "Profilovka nastavena" if is_cs else "Avatar Set",
+                tr("pfp_avatar_changed_title"),
                 msg,
             )
         else:
             QMessageBox.warning(
                 self,
-                "Chyba nastavení profilovky" if is_cs else "Avatar Set Error",
+                tr("pfp_avatar_error_title"),
                 msg,
             )
 
     def _on_pfp_copy(self, item: PfpItem):
-        is_cs = (i18n.current_language == "cs")
-        self.status_bar.showMessage(
-            f"✓ Profilovka '{item.title}' zkopírována do schránky (vložte Ctrl+V)"
-            if is_cs
-            else f"✓ Avatar '{item.title}' copied to clipboard (paste with Ctrl+V)",
-            6000,
-        )
+        self.status_bar.showMessage(tr("pfp_copied_status", title=item.title), 6000)
         if hasattr(self, "toast"):
-            self.toast.show_message(f"Profilovka '{item.title}' zkopírována do schránky (Ctrl+V)", icon="📋")
+            self.toast.show_message(tr("toast_pfp_copied", title=item.title), icon="📋")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

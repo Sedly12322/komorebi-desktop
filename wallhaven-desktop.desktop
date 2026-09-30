@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=Wallhaven Desktop
-Comment=Prohlížení a stahování tapet ze serveru Wallhaven.cc pro Arch Linux
-Exec=/home/sedly/.local/bin/wallhaven-desktop
-Icon=/home/sedly/projects/wallhaven-desktop/assets/icon.png
+Name=Komorebi Desktop
+Comment=Wallpapers (Wallhaven, MoeWalls, osu!) & PFPs (pfps.gg) for Linux & Windows
+Exec=/home/sedly/.local/bin/komorebi-desktop
+Icon=komorebi
 Terminal=false
 Type=Application
 Categories=Graphics;Photography;Utility;
-Keywords=wallpaper;wallhaven;background;desktop;hyprland;images;
-StartupWMClass=wallhaven-desktop
+Keywords=wallpaper;wallhaven;moewalls;osu;pfps;avatar;background;desktop;hyprland;images;
+StartupWMClass=komorebi-desktop
