@@ -18,6 +18,7 @@ import time
 import shutil
 import tarfile
 import tempfile
+import threading
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ import urllib.error
 
 from PyQt6.QtCore import (
     Qt,
+    QObject,
     QThread,
     pyqtSignal,
     QPoint,
@@ -63,6 +65,36 @@ from wallhaven.styles import get_asset_path, get_palette
 
 GITHUB_REPO = "Sedly12322/komorebi-desktop"
 GITHUB_API_BASE = f"https://api.github.com/repos/{GITHUB_REPO}"
+
+# ---------------------------------------------------------------------------
+# Worker lifetime registry
+# ---------------------------------------------------------------------------
+# Workers are never parented to widgets. This set keeps them alive until they
+# have delivered their result, so closing a dialog mid-check/mid-install can
+# never destroy a running thread.
+_ACTIVE_WORKERS: set = set()
+_SHUTDOWN_HOOKED = False
+
+
+def _track_worker(worker):
+    global _SHUTDOWN_HOOKED
+    _ACTIVE_WORKERS.add(worker)
+    app = QApplication.instance()
+    if app is not None and not _SHUTDOWN_HOOKED:
+        app.aboutToQuit.connect(_wait_for_running_installs)
+        _SHUTDOWN_HOOKED = True
+
+
+def _untrack_worker_later(worker):
+    # Deferred so that all queued result slots run before the last reference drops.
+    QTimer.singleShot(1000, lambda: _ACTIVE_WORKERS.discard(worker))
+
+
+def _wait_for_running_installs():
+    """On quit, let an in-progress install finish instead of leaving a half-updated app."""
+    for w in list(_ACTIVE_WORKERS):
+        if isinstance(w, QThread) and w.isRunning():
+            w.wait(300_000)
 
 
 def parse_semver(v: str) -> tuple[int, ...]:
@@ -211,52 +243,137 @@ def check_for_updates_sync(current_ver: str = __version__) -> UpdateInfo:
     return info
 
 
-class UpdateCheckWorker(QThread):
-    """Background worker to check for application updates without blocking UI."""
+class UpdateCheckWorker(QObject):
+    """Checks GitHub for updates on a daemon Python thread.
+
+    Uses a daemon ``threading.Thread`` instead of ``QThread`` so that closing a
+    dialog or quitting the app while a (slow) network request is in flight can
+    never trigger ``QThread: Destroyed while thread is still running`` aborts.
+    The worker is intentionally never parented to a widget; its lifetime is
+    managed by the module-level registry until results have been delivered.
+    """
 
     check_finished = pyqtSignal(object)  # UpdateInfo
     check_failed = pyqtSignal(str)
 
     def __init__(self, current_ver: str = __version__, parent=None):
-        super().__init__(parent)
+        # ``parent`` is accepted for API compatibility but deliberately ignored.
+        super().__init__(None)
         self.current_ver = current_ver
+        self._thread: threading.Thread | None = None
+        self.check_finished.connect(self._cleanup)
+        self.check_failed.connect(self._cleanup)
 
-    def run(self):
+    def start(self):
+        if self.isRunning():
+            return
+        _track_worker(self)
+        self._thread = threading.Thread(target=self._run, name="komorebi-update-check", daemon=True)
+        self._thread.start()
+
+    def isRunning(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
+    def wait(self, msecs: int | None = None) -> bool:
+        if self._thread:
+            self._thread.join(None if msecs is None else msecs / 1000.0)
+        return not self.isRunning()
+
+    def _run(self):
         try:
             info = check_for_updates_sync(self.current_ver)
             if info.error and not info.latest_version:
-                self.check_failed.emit(info.error)
+                self._safe_emit(self.check_failed, info.error)
             else:
-                self.check_finished.emit(info)
+                self._safe_emit(self.check_finished, info)
         except Exception as e:
-            self.check_failed.emit(str(e))
+            self._safe_emit(self.check_failed, str(e))
+
+    @staticmethod
+    def _safe_emit(signal, value):
+        try:
+            signal.emit(value)
+        except RuntimeError:
+            # Receiver/wrapper already deleted (e.g. app shutting down) - ignore.
+            pass
+
+    def _cleanup(self, *_):
+        _untrack_worker_later(self)
 
 
 class UpdateApplyWorker(QThread):
-    """Background worker that downloads and installs the application update."""
+    """Background worker that downloads and installs the application update.
+
+    NOTE: the result signal is called ``apply_finished`` on purpose - naming it
+    ``finished`` would shadow QThread's built-in ``finished`` signal.
+    """
 
     progress = pyqtSignal(int, str)  # (percent 0-100, message)
-    finished = pyqtSignal(bool, str)  # (success, message / instructions)
+    apply_finished = pyqtSignal(bool, str)  # (success, message / installer path)
 
-    def __init__(self, info: UpdateInfo, force_branch: str = "", parent=None):
-        super().__init__(parent)
+    UPDATE_ITEMS = ("wallhaven", "assets", "main.py", "requirements.txt", "LICENSE", "install.sh")
+
+    def __init__(self, info: UpdateInfo, parent=None):
+        # Never parented to a dialog: closing the dialog must not destroy a running install.
+        super().__init__(None)
         self.info = info
-        self.force_branch = force_branch
+        self.finished.connect(lambda: _untrack_worker_later(self))
+
+    def start(self, *args):
+        _track_worker(self)
+        super().start(*args)
 
     def run(self):
         try:
+            # Guard against downgrades: only ever install a strictly newer release.
+            if not self.info.has_update or not is_newer_version(self.info.latest_version, self.info.current_version):
+                self.apply_finished.emit(
+                    False,
+                    f"Verze {self.info.latest_version or '?'} není novější než nainstalovaná "
+                    f"{self.info.current_version}. Aktualizace byla zrušena.",
+                )
+                return
             if sys.platform == "win32":
                 self._update_windows()
             else:
                 self._update_linux()
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.apply_finished.emit(False, str(e))
 
+    # ------------------------------------------------------------------ helpers
+    def _download(self, url: str, target: Path, pct_start: int, pct_span: int):
+        req = urllib.request.Request(url, headers={"User-Agent": f"Komorebi-Desktop-Updater/{__version__}"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            total_size = int(resp.headers.get("content-length", 0) or 0)
+            downloaded = 0
+            with open(target, "wb") as f:
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    cur_mb = downloaded / (1024 * 1024)
+                    if total_size > 0:
+                        pct = pct_start + int((downloaded / total_size) * pct_span)
+                        tot_mb = total_size / (1024 * 1024)
+                        self.progress.emit(pct, f"Stahování: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct}%)")
+                    else:
+                        self.progress.emit(pct_start, f"Stahování: {cur_mb:.1f} MB")
+
+    @staticmethod
+    def _remove_path(p: Path):
+        if p.is_symlink() or p.is_file():
+            p.unlink()
+        elif p.is_dir():
+            shutil.rmtree(p)
+
+    # ------------------------------------------------------------------ Windows
     def _update_windows(self):
-        """Downloads the Windows installer and prepares it for execution."""
+        """Downloads the Windows installer; it is launched after the user confirms restart."""
         installer_url = self.info.windows_installer_url
         if not installer_url:
-            self.finished.emit(
+            self.apply_finished.emit(
                 False,
                 "Nebyl nalezen instalátor pro Windows v balíčku vydání.\n"
                 f"Stáhněte novou verzi přímo z: {self.info.html_url}",
@@ -264,181 +381,195 @@ class UpdateApplyWorker(QThread):
             return
 
         out_name = self.info.windows_installer_name or "Wallhaven-Desktop-Setup.exe"
-        temp_dir = Path(tempfile.gettempdir())
-        target_path = temp_dir / out_name
+        target_path = Path(tempfile.gettempdir()) / out_name
 
         self.progress.emit(5, f"Stahuji instalátor {out_name}...")
+        self._download(installer_url, target_path, 5, 85)
 
-        req = urllib.request.Request(
-            installer_url,
-            headers={"User-Agent": f"Komorebi-Desktop-Updater/{__version__}"},
-        )
-
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            total_size = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            block_size = 64 * 1024
-
-            with open(target_path, "wb") as f:
-                while True:
-                    chunk = resp.read(block_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        pct = int((downloaded / total_size) * 85) + 5
-                        cur_mb = downloaded / (1024 * 1024)
-                        tot_mb = total_size / (1024 * 1024)
-                        self.progress.emit(pct, f"Stahování: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct}%)")
-
-        self.progress.emit(95, "Instalátor byl stažen. Připravuji spuštění...")
-        time.sleep(0.5)
         self.progress.emit(100, "Hotovo! Instalátor je připraven.")
-        self.finished.emit(True, str(target_path))
+        self.apply_finished.emit(True, str(target_path))
 
+    # ------------------------------------------------------------------ Linux
     def _update_linux(self):
-        """Updates Komorebi Desktop on Linux (via git pull or archive unpack)."""
+        if getattr(sys, "frozen", False):
+            raise RuntimeError(
+                "Zabalenou verzi pro Linux nelze aktualizovat z aplikace. "
+                f"Stáhněte novou verzi z: {self.info.html_url}"
+            )
         app_root = Path(__file__).resolve().parent.parent
-        installed_share_dir = Path.home() / ".local/share/komorebi-desktop"
+        if (app_root / ".git").exists():
+            self._update_git_clone(app_root)
+        else:
+            self._update_from_archive(app_root)
 
-        # Case 1: Running from a git clone
-        if (app_root / ".git").is_dir():
-            self.progress.emit(10, "Zjišťuji změny z GitHubu přes Git...")
-            try:
-                res_fetch = subprocess.run(
-                    ["git", "fetch", "origin"],
-                    cwd=str(app_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=20,
-                )
-                if res_fetch.returncode != 0:
-                    raise RuntimeError(f"git fetch failed: {res_fetch.stderr}")
+    def _run_git(self, args: list[str], repo: Path, timeout: int = 60) -> str:
+        res = subprocess.run(["git", *args], cwd=str(repo), capture_output=True, text=True, timeout=timeout)
+        if res.returncode != 0:
+            detail = (res.stderr or res.stdout).strip()
+            raise RuntimeError(f"git {' '.join(args)} selhal: {detail}")
+        return res.stdout.strip()
 
-                self.progress.emit(35, "Aplikuji změny (git pull)...")
-                branch = self.force_branch or "main"
-                res_pull = subprocess.run(
-                    ["git", "pull", "--ff-only", "origin", branch],
-                    cwd=str(app_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=20,
-                )
-                if res_pull.returncode != 0:
-                    # Try rebase or checkout
-                    subprocess.run(["git", "pull", "origin", branch], cwd=str(app_root), timeout=20)
+    def _run_install_script(self, repo: Path):
+        install_sh = repo / "install.sh"
+        if not install_sh.is_file():
+            return
+        self.progress.emit(70, "Aktualizuji systémovou instalaci (install.sh)...")
+        res = subprocess.run(["bash", str(install_sh)], cwd=str(repo), capture_output=True, text=True, timeout=900)
+        if res.returncode != 0:
+            tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
+            raise RuntimeError(f"install.sh selhal:\n{tail}")
 
-                self.progress.emit(65, "Aktualizuji systémovou instalaci...")
-                install_sh = app_root / "install.sh"
-                if install_sh.is_file():
-                    subprocess.run(["bash", str(install_sh)], cwd=str(app_root), timeout=60)
+    def _update_git_clone(self, repo: Path):
+        """Fast-forward a git checkout. Never merges, never touches local changes."""
+        self.progress.emit(10, "Kontroluji stav Git repozitáře...")
+        if self._run_git(["status", "--porcelain", "--untracked-files=no"], repo):
+            raise RuntimeError(
+                "Repozitář obsahuje neuložené změny. Uložte je (commit/stash) "
+                "a aktualizujte ručně příkazem git pull."
+            )
+        branch = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"], repo)
+        if branch == "HEAD":
+            raise RuntimeError("Repozitář není na žádné větvi (detached HEAD). Aktualizujte ručně.")
 
-                self.progress.emit(100, "Aktualizace dokončena!")
-                self.finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován z repozitáře.")
-                return
-            except Exception as e:
-                # If git pull fails, fallback to archive download
-                self.progress.emit(40, f"Git selhal ({e}), stahuji archiv z GitHubu...")
+        self.progress.emit(25, f"Stahuji změny z GitHubu (git fetch origin {branch})...")
+        self._run_git(["fetch", "origin", branch], repo, timeout=120)
 
-        # Case 2: Running from installed share or standalone
-        target_dir = installed_share_dir if installed_share_dir.is_dir() else app_root
-        tag = self.info.latest_version or "main"
+        self.progress.emit(50, "Aplikuji změny (fast-forward)...")
+        self._run_git(["merge", "--ff-only", f"origin/{branch}"], repo)
+
+        self._run_install_script(repo)
+
+        self.progress.emit(100, "Aktualizace dokončena!")
+        self.apply_finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován z repozitáře.")
+
+    def _update_from_archive(self, target_dir: Path):
+        """Download release tarball, validate it, then swap files in with automatic rollback."""
+        tag = self.info.latest_version
         archive_url = self.info.tarball_url or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.tar.gz"
 
-        self.progress.emit(15, f"Stahuji archiv vydání ({tag})...")
-        req = urllib.request.Request(
-            archive_url,
-            headers={"User-Agent": f"Komorebi-Desktop-Updater/{__version__}"},
-        )
+        with tempfile.TemporaryDirectory(prefix="komorebi-update-") as tmp:
+            tmp_dir = Path(tmp)
+            tmp_tar = tmp_dir / "update.tar.gz"
+            extract_dir = tmp_dir / "extracted"
+            extract_dir.mkdir()
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_tar = Path(tmp_dir) / "update.tar.gz"
+            self.progress.emit(10, f"Stahuji archiv vydání ({tag})...")
+            self._download(archive_url, tmp_tar, 10, 45)
 
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                total_size = int(resp.headers.get("content-length", 0))
-                downloaded = 0
-                block_size = 64 * 1024
-
-                with open(tmp_tar, "wb") as f:
-                    while True:
-                        chunk = resp.read(block_size)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if total_size > 0:
-                            pct = int((downloaded / total_size) * 45) + 15
-                            cur_mb = downloaded / (1024 * 1024)
-                            tot_mb = total_size / (1024 * 1024)
-                            self.progress.emit(pct, f"Stahování: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct}%)")
-
-            self.progress.emit(65, "Rozbaluji archiv aktualizace...")
+            self.progress.emit(58, "Rozbaluji a ověřuji archiv...")
             with tarfile.open(tmp_tar, "r:gz") as tar:
-                tar.extractall(path=tmp_dir)
+                try:
+                    tar.extractall(path=extract_dir, filter="data")
+                except TypeError:  # Python < 3.12 without extraction filters
+                    root = extract_dir.resolve()
+                    for m in tar.getmembers():
+                        dest = (extract_dir / m.name).resolve()
+                        if root not in dest.parents and dest != root:
+                            raise RuntimeError(f"Nebezpečná cesta v archivu: {m.name}")
+                        if m.issym() or m.islnk():
+                            raise RuntimeError(f"Archiv obsahuje nepovolený odkaz: {m.name}")
+                    tar.extractall(path=extract_dir)
 
-            # Find extracted root directory
-            extracted_subdirs = [p for p in Path(tmp_dir).iterdir() if p.is_dir() and p != Path(tmp_dir)]
-            if not extracted_subdirs:
-                raise RuntimeError("V archivu nebyla nalezena žádná data.")
-            src_root = extracted_subdirs[0]
+            roots = [p for p in extract_dir.iterdir() if p.is_dir()]
+            if len(roots) != 1:
+                raise RuntimeError("Neočekávaná struktura archivu aktualizace.")
+            src_root = roots[0]
 
-            self.progress.emit(75, "Kopíruji aktualizované soubory aplikace...")
-            target_dir.mkdir(parents=True, exist_ok=True)
+            init_file = src_root / "wallhaven" / "__init__.py"
+            if not init_file.is_file() or not (src_root / "main.py").is_file():
+                raise RuntimeError("Archiv neobsahuje platnou aplikaci Komorebi Desktop.")
+            m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_file.read_text(encoding="utf-8"))
+            archive_ver = m.group(1) if m else ""
+            if not is_newer_version(archive_ver, self.info.current_version):
+                raise RuntimeError(
+                    f"Archiv obsahuje verzi {archive_ver or '?'}, která není novější než "
+                    f"{self.info.current_version}. Aktualizace byla zrušena."
+                )
 
-            # Update package directory
-            for item_name in ["wallhaven", "assets", "main.py", "requirements.txt", "LICENSE", "install.sh"]:
-                src_item = src_root / item_name
-                dst_item = target_dir / item_name
-                if src_item.is_dir():
-                    if dst_item.exists():
-                        shutil.rmtree(dst_item)
-                    shutil.copytree(src_item, dst_item)
-                elif src_item.is_file():
-                    shutil.copy2(src_item, dst_item)
+            # Install new Python dependencies BEFORE touching any app files,
+            # so a pip failure leaves the current installation fully intact.
+            venv_pip = target_dir / ".venv" / "bin" / "pip"
+            new_req = src_root / "requirements.txt"
+            if venv_pip.is_file() and new_req.is_file():
+                self.progress.emit(65, "Instaluji Python závislosti...")
+                res = subprocess.run(
+                    [str(venv_pip), "install", "-r", str(new_req), "--quiet"],
+                    capture_output=True, text=True, timeout=600,
+                )
+                if res.returncode != 0:
+                    tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
+                    raise RuntimeError(f"Instalace závislostí selhala (aplikace nebyla změněna):\n{tail}")
 
-            self.progress.emit(88, "Aktualizuji ikony a spouštěcí soubory...")
-            # Update icons if possible
-            icon_dir = Path.home() / ".local/share/icons/hicolor/256x256/apps"
+            self.progress.emit(80, "Nahrazuji soubory aplikace (se zálohou)...")
+            self._swap_in(src_root, target_dir)
+
+        self.progress.emit(92, "Aktualizuji ikony...")
+        try:
+            icon_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/256x256/apps"
             src_icon = target_dir / "assets" / "icon.png"
             if src_icon.exists() and icon_dir.exists():
-                shutil.copy2(src_icon, icon_dir / "komorebi.png")
-                shutil.copy2(src_icon, icon_dir / "komorebi-desktop.png")
+                for name in ("komorebi.png", "komorebi-desktop.png"):
+                    shutil.copy2(src_icon, icon_dir / name)
+        except Exception:
+            pass  # cosmetic only
 
-            # Update pip requirements if virtualenv exists
-            venv_pip = target_dir / ".venv" / "bin" / "pip"
-            req_file = target_dir / "requirements.txt"
-            if venv_pip.is_file() and req_file.is_file():
-                self.progress.emit(92, "Kontroluji Python závislosti...")
+        self.progress.emit(100, "Aktualizace úspěšně dokončena!")
+        self.apply_finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován.")
+
+    def _swap_in(self, src_root: Path, target_dir: Path):
+        """Replace app files atomically-per-item; restore everything on any failure."""
+        backup = target_dir / ".update-backup"
+        if backup.exists():
+            shutil.rmtree(backup)
+        backup.mkdir(parents=True)
+
+        touched: list[str] = []
+        try:
+            for name in self.UPDATE_ITEMS:
+                src = src_root / name
+                if not src.exists():
+                    continue
+                dst = target_dir / name
+                if dst.exists() or dst.is_symlink():
+                    os.replace(dst, backup / name)  # same filesystem -> atomic rename
+                touched.append(name)
+                if src.is_dir():
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+        except Exception:
+            for name in reversed(touched):
+                dst = target_dir / name
                 try:
-                    subprocess.run([str(venv_pip), "install", "-r", str(req_file), "--quiet"], timeout=30)
+                    self._remove_path(dst)
                 except Exception:
                     pass
+                if (backup / name).exists() or (backup / name).is_symlink():
+                    os.replace(backup / name, dst)
+            shutil.rmtree(backup, ignore_errors=True)
+            raise
 
-            self.progress.emit(100, "Aktualizace úspěšně dokončena!")
-            self.finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován.")
+        shutil.rmtree(backup, ignore_errors=True)
 
 
 def restart_application():
-    """Cleanly restarts Komorebi Desktop in a detached process and exits the current one."""
+    """Restarts Komorebi Desktop in a detached process and exits the current one."""
     app = QApplication.instance()
 
-    if sys.platform == "win32":
-        if getattr(sys, "frozen", False):
-            cmd = [sys.executable] + sys.argv[1:]
-        else:
-            cmd = [sys.executable, sys.argv[0]] + sys.argv[1:]
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable] + sys.argv[1:]
+    elif sys.argv and sys.argv[0].endswith("__main__.py"):
+        cmd = [sys.executable, "-m", "wallhaven"] + sys.argv[1:]
     else:
-        launcher = Path.home() / ".local/bin" / "komorebi-desktop"
-        if launcher.exists() and os.access(launcher, os.X_OK):
-            cmd = [str(launcher)] + sys.argv[1:]
-        elif getattr(sys, "frozen", False):
-            cmd = [sys.executable] + sys.argv[1:]
-        else:
-            cmd = [sys.executable, sys.argv[0]] + sys.argv[1:]
+        # Re-run exactly the same interpreter + entry script (works for the
+        # ~/.local/share install, git checkouts and ad-hoc source copies).
+        cmd = [sys.executable] + sys.argv
 
     try:
-        subprocess.Popen(cmd, start_new_session=True)
+        if sys.platform == "win32":
+            subprocess.Popen(cmd, close_fds=True)
+        else:
+            subprocess.Popen(cmd, start_new_session=True)
     except Exception as e:
         print(f"Failed to restart application: {e}")
 
@@ -520,22 +651,22 @@ class UpdateDialog(QDialog):
         """)
         ver_row.addWidget(cur_badge)
 
-        arrow_lbl = QLabel("➔")
-        arrow_lbl.setStyleSheet("color: #6366f1; font-weight: 900; font-size: 12px;")
-        ver_row.addWidget(arrow_lbl)
-
-        new_badge = QLabel(f"{new_v}")
-        new_badge.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: 800;
-            padding: 2px 10px;
-            border-radius: 6px;
-        """)
-        ver_row.addWidget(new_badge)
-
         if self.info.has_update:
+            arrow_lbl = QLabel("➔")
+            arrow_lbl.setStyleSheet("color: #6366f1; font-weight: 900; font-size: 12px;")
+            ver_row.addWidget(arrow_lbl)
+
+            new_badge = QLabel(f"{new_v}")
+            new_badge.setStyleSheet("""
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
+                color: #ffffff;
+                font-size: 11px;
+                font-weight: 800;
+                padding: 2px 10px;
+                border-radius: 6px;
+            """)
+            ver_row.addWidget(new_badge)
+
             status_text = QLabel(tr("update_available_status", version=new_v))
             status_text.setStyleSheet("color: #34d399; font-size: 11.5px; font-weight: 700;")
             ver_row.addWidget(status_text)
@@ -647,8 +778,7 @@ class UpdateDialog(QDialog):
         btn_row.addWidget(self.close_btn)
 
         # Primary update button
-        btn_text = tr("update_btn_apply") if self.info.has_update else tr("update_reinstall_btn")
-        self.apply_btn = QPushButton(btn_text)
+        self.apply_btn = QPushButton(tr("update_btn_apply"))
         self.apply_btn.setObjectName("primaryButton")
         self.apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.apply_btn.setStyleSheet("""
@@ -670,26 +800,40 @@ class UpdateDialog(QDialog):
             }
         """)
         self.apply_btn.clicked.connect(self._start_update)
+        # No "reinstall/force" path: installing a non-newer release would downgrade the app.
+        self.apply_btn.setVisible(self.info.has_update)
         btn_row.addWidget(self.apply_btn)
 
         layout.addLayout(btn_row)
+
+    def _is_installing(self) -> bool:
+        return self.apply_worker is not None and self.apply_worker.isRunning()
+
+    def reject(self):
+        # Esc / window close must not abandon a running install.
+        if self._is_installing():
+            return
+        super().reject()
 
     def _open_github(self):
         url = self.info.html_url or f"https://github.com/{GITHUB_REPO}/releases"
         QDesktopServices.openUrl(QUrl(url))
 
     def _start_update(self):
+        if self._is_installing() or not self.info.has_update:
+            return
         self.apply_btn.setEnabled(False)
         self.close_btn.setEnabled(False)
         self.github_btn.setEnabled(False)
         self.progress_container.setVisible(True)
 
         self.status_lbl.setText(tr("update_downloading", percent=0))
+        self.status_lbl.setStyleSheet("color: #a5b4fc; font-size: 12px; font-weight: 600;")
         self.prog_bar.setValue(0)
 
-        self.apply_worker = UpdateApplyWorker(self.info, parent=self)
+        self.apply_worker = UpdateApplyWorker(self.info)
         self.apply_worker.progress.connect(self._on_progress)
-        self.apply_worker.finished.connect(self._on_finished)
+        self.apply_worker.apply_finished.connect(self._on_finished)
         self.apply_worker.start()
 
     def _on_progress(self, pct: int, msg: str):

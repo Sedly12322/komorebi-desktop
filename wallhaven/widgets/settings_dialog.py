@@ -434,23 +434,28 @@ class SettingsDialog(QDialog):
         self.check_worker.start()
 
     def _on_check_finished(self, info: UpdateInfo):
-        self.check_update_btn.setEnabled(True)
-        self.latest_update_info = info
-        if info.has_update:
-            self.update_status_lbl.setText(tr("update_available_status", version=info.latest_version))
-            self.update_status_lbl.setStyleSheet("color: #34d399; font-weight: 700; font-size: 11.5px;")
-            self.apply_update_btn.setVisible(True)
-            self.apply_update_btn.setText(f"⬇️ {tr('update_banner_apply')} ({info.latest_version})")
-        else:
-            self.update_status_lbl.setText(tr("update_latest_status", version=__version__))
-            self.update_status_lbl.setStyleSheet("color: #38bdf8; font-weight: 600; font-size: 11.5px;")
-            self.apply_update_btn.setVisible(True)
-            self.apply_update_btn.setText(f"📋 {tr('update_banner_notes')}")
+        try:
+            self.check_update_btn.setEnabled(True)
+            self.latest_update_info = info
+            if info.has_update:
+                self.update_status_lbl.setText(tr("update_available_status", version=info.latest_version))
+                self.update_status_lbl.setStyleSheet("color: #34d399; font-weight: 700; font-size: 11.5px;")
+                self.apply_update_btn.setVisible(True)
+                self.apply_update_btn.setText(f"⬇️ {tr('update_banner_apply')} ({info.latest_version})")
+            else:
+                self.update_status_lbl.setText(tr("update_latest_status", version=__version__))
+                self.update_status_lbl.setStyleSheet("color: #38bdf8; font-weight: 600; font-size: 11.5px;")
+                self.apply_update_btn.setVisible(False)
+        except RuntimeError:
+            pass
 
     def _on_check_failed(self, error: str):
-        self.check_update_btn.setEnabled(True)
-        self.update_status_lbl.setText(tr("update_check_error", error=error))
-        self.update_status_lbl.setStyleSheet("color: #f87171; font-size: 11.5px;")
+        try:
+            self.check_update_btn.setEnabled(True)
+            self.update_status_lbl.setText(tr("update_check_error", error=error))
+            self.update_status_lbl.setStyleSheet("color: #f87171; font-size: 11.5px;")
+        except RuntimeError:
+            pass
 
     def _on_open_update_dialog(self):
         if not self.latest_update_info:

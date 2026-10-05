@@ -3,18 +3,19 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wallhaven-desktop"
-version = "1.4.2"
+name = "komorebi-desktop"
+version = "2.0.0"
 authors = [
   { name = "Sedly12322" }
 ]
-description = "Modern dark-themed Wallhaven wallpaper browser and downloader for Arch Linux / Hyprland"
+description = "Modern wallpaper & avatar browser (Wallhaven, MoeWalls, osu!, pfps.gg) for Linux & Windows"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
   "Environment :: X11 Applications :: Qt",
   "Topic :: Desktop Environment",
   "Topic :: Multimedia :: Graphics",
@@ -26,13 +27,15 @@ dependencies = [
 ]
 
 [project.scripts]
-wallhaven-desktop = "wallhaven.app:main"
+komorebi = "wallhaven.app:main"
+komorebi-desktop = "wallhaven.app:main"
 wallhaven = "wallhaven.app:main"
+wallhaven-desktop = "wallhaven.app:main"
 
 [project.urls]
-Homepage = "https://github.com/Sedly12322/wallhaven-desktop"
-Repository = "https://github.com/Sedly12322/wallhaven-desktop"
-Issues = "https://github.com/Sedly12322/wallhaven-desktop/issues"
+Homepage = "https://github.com/Sedly12322/komorebi-desktop"
+Repository = "https://github.com/Sedly12322/komorebi-desktop"
+Issues = "https://github.com/Sedly12322/komorebi-desktop/issues"
 
 [tool.setuptools.packages.find]
 include = ["wallhaven*"]

@@ -1,4 +1,4 @@
-"""Wallhaven Desktop application package."""
+"""Komorebi Desktop application package."""
 
-__version__ = "1.4.2"
-__app_name__ = "Wallhaven Desktop"
+__version__ = "2.0.0"
+__app_name__ = "Komorebi Desktop"
