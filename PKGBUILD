@@ -1,11 +1,11 @@
 # Maintainer: Sedly12322 <d.sedlar41@gmail.com>
-pkgname=wallhaven-desktop-git
-_pkgname=wallhaven-desktop
-pkgver=1.0.0.r2.ge5b356f
+pkgname=komorebi-desktop-git
+_pkgname=komorebi-desktop
+pkgver=2.0.0.r1.g0000000
 pkgrel=1
-pkgdesc="Modern dark-themed Wallhaven wallpaper browser and downloader for Arch Linux / Hyprland"
+pkgdesc="Modern wallpaper & avatar browser (Wallhaven, MoeWalls, osu!, pfps.gg) for Linux & Hyprland"
 arch=('any')
-url="https://github.com/Sedly12322/wallhaven-desktop"
+url="https://github.com/Sedly12322/komorebi-desktop"
 license=('MIT')
 depends=(
     'python'
@@ -27,9 +27,9 @@ optdepends=(
     'swww: Wayland wallpaper daemon'
     'feh: X11 wallpaper setter'
 )
-provides=("$_pkgname")
-conflicts=("$_pkgname")
-source=("git+https://github.com/Sedly12322/wallhaven-desktop.git")
+provides=("$_pkgname" "wallhaven-desktop" "wallhaven-desktop-git")
+conflicts=("$_pkgname" "wallhaven-desktop")
+source=("git+https://github.com/Sedly12322/komorebi-desktop.git")
 sha256sums=('SKIP')
 
 pkgver() {
