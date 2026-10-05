@@ -805,18 +805,19 @@ def _get_pywal_palette() -> Optional[Dict[str, str]]:
 
 def get_available_themes() -> List[Tuple[str, str]]:
     """Return list of (theme_id, display_name) for theme selection."""
+    from wallhaven.i18n import tr
     themes = []
 
     # 1. Matugen / System dynamic colors (first if available on Linux)
     if is_matugen_available() or _detect_linux_system_accent() or _get_gtk_palette() or _get_kde_palette():
-        themes.append(("matugen", "🪄 Systémové barvy (Matugen / Auto)"))
+        themes.append(("matugen", tr("theme_matugen")))
 
     # 2. Curated theme palettes
     themes.extend([(k, v["name"]) for k, v in THEME_PALETTES.items()])
 
     # 3. Pywal colors
     if (Path.home() / ".cache" / "wal" / "colors.json").exists():
-        themes.append(("pywal", "🎨 Pywal (Wallpaper Colors)"))
+        themes.append(("pywal", tr("theme_pywal")))
 
     return themes
 

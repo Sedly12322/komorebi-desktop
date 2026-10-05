@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPixmap, QImage
+from wallhaven.i18n import tr
 
 
 @dataclass
@@ -223,7 +224,7 @@ class PfpsClient:
                 pic_dir.mkdir(parents=True, exist_ok=True)
                 target_pic = pic_dir / item.filename
                 shutil.copyfile(src_file, target_pic)
-                return True, f"Profilovka '{item.title}' byla úspěšně uložena pro Windows účet a profil!"
+                return True, tr("pfp_win_saved_msg", title=item.title)
 
             # 1. Linux Standard ~/.face and ~/.face.icon
             home_dir = Path.home()
@@ -256,8 +257,8 @@ class PfpsClient:
                             "notify-send",
                             "-a", "Komorebi",
                             "-i", str(face_path),
-                            "Profilovka změněna",
-                            f"Systémový avatar byl úspěšně nastaven na: {item.title}",
+                            tr("pfp_avatar_changed_title"),
+                            tr("pfp_avatar_changed_body", title=item.title),
                         ],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
@@ -266,9 +267,9 @@ class PfpsClient:
                 except Exception:
                     pass
 
-            return True, f"Profilovka '{item.title}' byla úspěšně nastavena pro systém a plochu!"
+            return True, tr("pfp_system_saved_msg", title=item.title)
         except Exception as e:
-            return False, f"Chyba při nastavování profilovky: {e}"
+            return False, tr("pfp_error_setting", error=str(e))
 
     @staticmethod
     def copy_image_to_clipboard(pixmap: QPixmap) -> bool:

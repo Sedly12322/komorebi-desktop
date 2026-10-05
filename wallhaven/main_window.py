@@ -366,7 +366,7 @@ class MainWindow(QMainWindow):
 
         # Quick Reset Filters button
         self.reset_filter_btn = QPushButton("↺")
-        self.reset_filter_btn.setToolTip("Resetovat filtry na výchozí")
+        self.reset_filter_btn.setToolTip(tr("reset_filters_tip"))
         self.reset_filter_btn.setFixedSize(30, 30)
         self.reset_filter_btn.setStyleSheet("""
             QPushButton {
@@ -850,6 +850,9 @@ class MainWindow(QMainWindow):
         self.pfps_cat_lbl.setText(tr("pfps_category_label"))
         self.pfps_sort_lbl.setText(tr("pfps_sort_label"))
         self._retranslate_pfps_combos()
+
+        if hasattr(self, "reset_filter_btn"):
+            self.reset_filter_btn.setToolTip(tr("reset_filters_tip"))
 
         if hasattr(self, "sidebar"):
             self.sidebar.retranslate_ui()
@@ -1465,4 +1468,4 @@ class MainWindow(QMainWindow):
             self.content_canvas.update()
         if hasattr(self, "toast"):
             name = display_name or theme_id.capitalize()
-            self.toast.show_message(f"Motiv: {name}", icon="🎨", duration_ms=2500)
+            self.toast.show_message(tr("toast_theme_changed", name=name), icon="🎨", duration_ms=2500)

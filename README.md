@@ -80,9 +80,9 @@ cd komorebi-desktop
 
 Ready-to-use binaries are available on the [**GitHub Releases**](https://github.com/Sedly12322/komorebi-desktop/releases) page:
 
-1. **Installer (`.exe`):** Download and run **`Wallhaven-Desktop-Setup.exe`** (or `Komorebi-Desktop-Setup.exe`).  
+1. **Installer (`.exe`):** Download and run **`Komorebi-Desktop-Setup.exe`** (or `Wallhaven-Desktop-Setup.exe`).  
    *Installs the application and creates Start Menu & Desktop shortcuts, complete with an uninstaller.*
-2. **Portable Version (`.zip`):** Download **`Wallhaven-Desktop-Portable.zip`**, extract anywhere, and run `Wallhaven-Desktop.exe` directly without installing.
+2. **Portable Version (`.zip`):** Download **`Komorebi-Desktop-Portable.zip`** (or `Wallhaven-Desktop-Portable.zip`), extract anywhere, and run `Komorebi-Desktop.exe` directly without installing.
 
 *(Alternatively, run from source by double-clicking **`run.bat`**).*
 
@@ -149,7 +149,7 @@ makepkg -si
   - **KDE Plasma 5 & 6:** Built-in support via `plasma-apply-wallpaperimage`.
   - **GNOME / Cinnamon / MATE / XFCE:** Native integration via `gsettings` (supporting both light and dark theme background settings) and `xfconf-query`.
   - **X11 Window Managers:** Native support for `feh`, `nitrogen`, and `xwinwrap` + `mpv` for video backgrounds.
-  - **Windows 10/11:** Native Windows API (`SystemParametersInfoW`) for static images and registry wallpaper detection.
+  - **Windows 10/11:** Native Windows API (`SystemParametersInfoW`) for static images and Lively Wallpaper CLI integration for animated video wallpapers (`.mp4`).
   - **Configurable in Settings:** Choose auto-detection or select your preferred setter from a dropdown, test it with one click, or define custom command lines with `{file}`.
   - Toggle on/off anytime using the **`🖼️ Auto Wallpaper`** button in the sidebar.
 

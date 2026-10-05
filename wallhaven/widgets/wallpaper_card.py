@@ -188,7 +188,7 @@ class WallpaperCard(QFrame):
         # Quick view details button
         self.view_btn = QPushButton("🔍")
         self.view_btn.setFixedSize(34, 34)
-        self.view_btn.setToolTip("Zobrazit detaily a plné rozlišení")
+        self.view_btn.setToolTip(tr("card_view_tooltip"))
         self.view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.view_btn.setStyleSheet(self._action_btn_style("#64748b", "#475569"))
         self.view_btn.clicked.connect(lambda: self.clicked.emit(self.item))

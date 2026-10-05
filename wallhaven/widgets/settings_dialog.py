@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QCheckBox,
     QComboBox,
+    QScrollArea,
+    QWidget,
 )
 from wallhaven.config import config
 from wallhaven.cache import CACHE_DIR
@@ -37,21 +39,41 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("settings_title"))
         self.setMinimumWidth(620)
+        self.resize(650, 680)
         self.setModal(True)
         self._all_setters = get_available_wallpaper_setters()
         self.check_worker: UpdateCheckWorker | None = None
         self.latest_update_info: UpdateInfo | None = None
+
+        # Store initial settings for preview rollback on cancel
+        self._orig_theme = config.get("theme", "matugen" if is_matugen_available() else "dark")
+        self._orig_lang = i18n.current_language
+        self._orig_effects = config.background_effects
+
         self._init_ui()
         i18n.language_changed.connect(self.retranslate_ui)
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(14)
-        layout.setContentsMargins(20, 20, 20, 20)
+        root_layout = QVBoxLayout(self)
+        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(20, 20, 20, 16)
 
         self.title_lbl = QLabel(tr("settings_title"))
         self.title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        layout.addWidget(self.title_lbl)
+        root_layout.addWidget(self.title_lbl)
+
+        # Responsive Scroll Area for settings sections
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        scroll_widget = QWidget()
+        scroll_widget.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(scroll_widget)
+        layout.setSpacing(14)
+        layout.setContentsMargins(0, 4, 8, 4)
 
         # 1. Appearance & Language Section
         self.theme_group = QGroupBox(tr("theme_section"))
@@ -171,31 +193,15 @@ class SettingsDialog(QDialog):
         method_row.addWidget(self.method_lbl)
 
         self.setter_combo = QComboBox()
-        self.setter_combo.addItem(f"⭐ {tr('setter_auto')}", "auto")
-
-        # Add detected/available setters
-        for s in self._all_setters:
-            status = "✓ Dostupné" if s["available"] else "✗ Není nainstalováno"
-            vid = " | 🎬 Video" if s["supports_video"] else ""
-            label = f"{s['name']} [{status}{vid}]"
-            self.setter_combo.addItem(label, s["id"])
-
-        self.setter_combo.addItem(f"⚙ {tr('setter_custom')}", "custom")
-
-        # Select configured setter
-        cur_setter = config.wallpaper_setter
-        idx = self.setter_combo.findData(cur_setter)
-        if idx >= 0:
-            self.setter_combo.setCurrentIndex(idx)
-        else:
-            self.setter_combo.setCurrentIndex(0)
+        self.setter_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContentsOnFirstShow)
+        self._populate_setter_combo()
         self.setter_combo.currentIndexChanged.connect(self._on_setter_changed)
         method_row.addWidget(self.setter_combo, stretch=1)
 
         # Test wallpaper setter button
         self.test_wall_btn = QPushButton(tr("test_setter_btn"))
         self.test_wall_btn.setObjectName("headerToolBtn")
-        self.test_wall_btn.setToolTip("Vyzkoušet nastavení tapety na ploše")
+        self.test_wall_btn.setToolTip(tr("test_setter_tip"))
         self.test_wall_btn.clicked.connect(self._on_test_wallpaper)
         method_row.addWidget(self.test_wall_btn)
 
@@ -225,7 +231,7 @@ class SettingsDialog(QDialog):
         wall_layout.addWidget(self.custom_video_lbl)
 
         self.custom_video_input = QLineEdit()
-        self.custom_video_input.setPlaceholderText("např. mpvpaper -vs -o 'no-audio --loop' '*' '{file}' &")
+        self.custom_video_input.setPlaceholderText(tr("custom_video_placeholder"))
         self.custom_video_input.setText(config.custom_video_wallpaper_cmd)
         wall_layout.addWidget(self.custom_video_input)
 
@@ -287,10 +293,12 @@ class SettingsDialog(QDialog):
         update_layout.addWidget(self.auto_check_cb)
 
         layout.addWidget(self.update_group)
-
         layout.addStretch()
 
-        # Action Buttons
+        self.scroll_area.setWidget(scroll_widget)
+        root_layout.addWidget(self.scroll_area, 1)
+
+        # Action Buttons (fixed outside scroll area)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
@@ -303,10 +311,32 @@ class SettingsDialog(QDialog):
         self.save_btn.clicked.connect(self._on_save)
         btn_row.addWidget(self.save_btn)
 
-        layout.addLayout(btn_row)
+        root_layout.addLayout(btn_row)
 
     def _apply_group_style(self, group: QGroupBox):
         pass
+
+    def _populate_setter_combo(self):
+        cur_data = self.setter_combo.currentData() if hasattr(self, "setter_combo") else config.wallpaper_setter
+        self.setter_combo.blockSignals(True)
+        self.setter_combo.clear()
+        self.setter_combo.addItem(f"⭐ {tr('setter_auto')}", "auto")
+
+        for s in self._all_setters:
+            status = tr("setter_available") if s.get("available") else tr("setter_not_installed")
+            vid = tr("setter_video_badge") if s.get("supports_video") else ""
+            label = f"{s['name']} [{status}{vid}]"
+            self.setter_combo.addItem(label, s["id"])
+
+        self.setter_combo.addItem(f"⚙ {tr('setter_custom')}", "custom")
+
+        target = cur_data if cur_data is not None else config.wallpaper_setter
+        idx = self.setter_combo.findData(target)
+        if idx >= 0:
+            self.setter_combo.setCurrentIndex(idx)
+        else:
+            self.setter_combo.setCurrentIndex(0)
+        self.setter_combo.blockSignals(False)
 
     def _on_setter_changed(self):
         setter_id = self.setter_combo.currentData()
@@ -315,14 +345,14 @@ class SettingsDialog(QDialog):
             detected_str = " ".join(detected_list) if detected_list else tr("tool_none")
             self.det_lbl.setText(tr("detected_tool", tool=detected_str))
         elif setter_id == "custom":
-            self.det_lbl.setText("Použije se vlastní zadaný příkaz níže s parametrem {file}.")
+            self.det_lbl.setText(tr("setter_custom_desc"))
         else:
             setter_obj = next((s for s in self._all_setters if s["id"] == setter_id), None)
             if setter_obj:
-                desc = setter_obj["description"]
-                cmd = setter_obj["default_cmd"]
-                status = "Dostupné" if setter_obj["available"] else "Není nainstalováno"
-                self.det_lbl.setText(f"Status: {status} • {desc}\nPříkaz: {cmd}")
+                desc = setter_obj.get("description", "")
+                cmd = setter_obj.get("default_cmd", "")
+                status = tr("setter_status_available") if setter_obj.get("available") else tr("setter_status_not_installed")
+                self.det_lbl.setText(tr("setter_status_info", status=status, desc=desc, cmd=cmd))
 
     def _on_test_wallpaper(self):
         # Look for any existing wallpaper image or video in user directory or cache
@@ -346,9 +376,8 @@ class SettingsDialog(QDialog):
         if not sample_file:
             QMessageBox.information(
                 self,
-                "Test nastavení tapety",
-                "Nebyl nalezen žádný existující soubor tapety pro otestování. "
-                "Stáhněte nejprve libovolnou tapetu v aplikaci.",
+                tr("test_wall_title"),
+                tr("test_wall_not_found"),
             )
             return
 
@@ -360,14 +389,14 @@ class SettingsDialog(QDialog):
         if ok:
             QMessageBox.information(
                 self,
-                "Test nastavení tapety",
-                f"✓ Úspěch!\n{msg}\nTestovací soubor: {os.path.basename(sample_file)}",
+                tr("test_wall_title"),
+                tr("test_wall_success", msg=msg, filename=os.path.basename(sample_file)),
             )
         else:
             QMessageBox.warning(
                 self,
-                "Test nastavení tapety",
-                f"✗ Nastavení selhalo:\n{msg}",
+                tr("test_wall_title"),
+                tr("test_wall_fail", msg=msg),
             )
 
     def _on_theme_changed(self):
@@ -377,6 +406,9 @@ class SettingsDialog(QDialog):
             app = QApplication.instance()
             if app:
                 app.setStyleSheet(get_stylesheet(theme_id))
+            parent = self.parent()
+            if parent and hasattr(parent, "sidebar"):
+                parent.sidebar.update_theme_display(theme_id)
 
     def _on_language_changed(self):
         new_lang = self.lang_combo.currentData()
@@ -388,6 +420,25 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         if parent and hasattr(parent, "content_canvas") and hasattr(parent.content_canvas, "set_effects_enabled"):
             parent.content_canvas.set_effects_enabled(checked)
+
+    def reject(self):
+        # Revert live preview changes if cancelled
+        if config.get("theme") != self._orig_theme:
+            config.set("theme", self._orig_theme)
+            app = QApplication.instance()
+            if app:
+                app.setStyleSheet(get_stylesheet(self._orig_theme))
+            parent = self.parent()
+            if parent and hasattr(parent, "sidebar"):
+                parent.sidebar.update_theme_display(self._orig_theme)
+        if i18n.current_language != self._orig_lang:
+            i18n.set_language(self._orig_lang)
+        if config.background_effects != self._orig_effects:
+            config.background_effects = self._orig_effects
+            parent = self.parent()
+            if parent and hasattr(parent, "content_canvas") and hasattr(parent.content_canvas, "set_effects_enabled"):
+                parent.content_canvas.set_effects_enabled(self._orig_effects)
+        super().reject()
 
     def retranslate_ui(self):
         self.setWindowTitle(tr("settings_title"))
@@ -407,12 +458,15 @@ class SettingsDialog(QDialog):
         self.auto_wall_cb.setText(tr("auto_wall_checkbox"))
         self.method_lbl.setText(tr("wallpaper_setter_label"))
         self.test_wall_btn.setText(tr("test_setter_btn"))
+        self.test_wall_btn.setToolTip(tr("test_setter_tip"))
 
+        self._populate_setter_combo()
         self._on_setter_changed()
 
         self.custom_cmd_lbl.setText(tr("custom_cmd_label"))
         self.custom_cmd_input.setPlaceholderText(tr("custom_cmd_placeholder"))
         self.custom_video_lbl.setText(tr("custom_video_cmd_label"))
+        self.custom_video_input.setPlaceholderText(tr("custom_video_placeholder"))
         self.cache_group.setTitle(tr("cache_group"))
         self.cache_size_lbl.setText(self._get_cache_size_str())
         self.clear_cache_btn.setText(tr("cache_clear_button"))

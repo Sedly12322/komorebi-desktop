@@ -57,9 +57,9 @@ class AnimatedCapsuleBar(QWidget):
         tabs = [
             ("wallhaven", "🌌 Wallhaven"),
             ("moewalls", "🎬 MoeWalls"),
-            ("osu", "🎯 osu!"),
-            ("pfps", "🎭 Profilovky"),
-            ("installed", "💾 Stažené"),
+            ("osu", tr("tab_osu")),
+            ("pfps", tr("tab_pfps")),
+            ("installed", tr("tab_installed")),
         ]
 
         for mode, label in tabs:

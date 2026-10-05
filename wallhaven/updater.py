@@ -329,8 +329,7 @@ class UpdateApplyWorker(QThread):
             if not self.info.has_update or not is_newer_version(self.info.latest_version, self.info.current_version):
                 self.apply_finished.emit(
                     False,
-                    f"Verze {self.info.latest_version or '?'} není novější než nainstalovaná "
-                    f"{self.info.current_version}. Aktualizace byla zrušena.",
+                    tr("updater_err_not_newer", version=self.info.latest_version or '?', current=self.info.current_version),
                 )
                 return
             if sys.platform == "win32":
@@ -357,9 +356,9 @@ class UpdateApplyWorker(QThread):
                     if total_size > 0:
                         pct = pct_start + int((downloaded / total_size) * pct_span)
                         tot_mb = total_size / (1024 * 1024)
-                        self.progress.emit(pct, f"Stahování: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct}%)")
+                        self.progress.emit(pct, tr("updater_prog_downloading_mb", cur=cur_mb, tot=tot_mb, pct=pct))
                     else:
-                        self.progress.emit(pct_start, f"Stahování: {cur_mb:.1f} MB")
+                        self.progress.emit(pct_start, tr("updater_prog_downloading_cur", cur=cur_mb))
 
     @staticmethod
     def _remove_path(p: Path):
@@ -375,27 +374,23 @@ class UpdateApplyWorker(QThread):
         if not installer_url:
             self.apply_finished.emit(
                 False,
-                "Nebyl nalezen instalátor pro Windows v balíčku vydání.\n"
-                f"Stáhněte novou verzi přímo z: {self.info.html_url}",
+                tr("updater_err_no_win_installer", url=self.info.html_url),
             )
             return
 
-        out_name = self.info.windows_installer_name or "Wallhaven-Desktop-Setup.exe"
+        out_name = self.info.windows_installer_name or "Komorebi-Desktop-Setup.exe"
         target_path = Path(tempfile.gettempdir()) / out_name
 
-        self.progress.emit(5, f"Stahuji instalátor {out_name}...")
+        self.progress.emit(5, tr("updater_prog_download_installer", name=out_name))
         self._download(installer_url, target_path, 5, 85)
 
-        self.progress.emit(100, "Hotovo! Instalátor je připraven.")
+        self.progress.emit(100, tr("updater_prog_installer_ready"))
         self.apply_finished.emit(True, str(target_path))
 
     # ------------------------------------------------------------------ Linux
     def _update_linux(self):
         if getattr(sys, "frozen", False):
-            raise RuntimeError(
-                "Zabalenou verzi pro Linux nelze aktualizovat z aplikace. "
-                f"Stáhněte novou verzi z: {self.info.html_url}"
-            )
+            raise RuntimeError(tr("updater_err_frozen_linux", url=self.info.html_url))
         app_root = Path(__file__).resolve().parent.parent
         if (app_root / ".git").exists():
             self._update_git_clone(app_root)
@@ -413,7 +408,7 @@ class UpdateApplyWorker(QThread):
         install_sh = repo / "install.sh"
         if not install_sh.is_file():
             return
-        self.progress.emit(70, "Aktualizuji systémovou instalaci (install.sh)...")
+        self.progress.emit(70, tr("updater_prog_updating_system"))
         res = subprocess.run(["bash", str(install_sh)], cwd=str(repo), capture_output=True, text=True, timeout=900)
         if res.returncode != 0:
             tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
@@ -421,26 +416,23 @@ class UpdateApplyWorker(QThread):
 
     def _update_git_clone(self, repo: Path):
         """Fast-forward a git checkout. Never merges, never touches local changes."""
-        self.progress.emit(10, "Kontroluji stav Git repozitáře...")
+        self.progress.emit(10, tr("updater_prog_git_status"))
         if self._run_git(["status", "--porcelain", "--untracked-files=no"], repo):
-            raise RuntimeError(
-                "Repozitář obsahuje neuložené změny. Uložte je (commit/stash) "
-                "a aktualizujte ručně příkazem git pull."
-            )
+            raise RuntimeError(tr("updater_err_git_dirty"))
         branch = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"], repo)
         if branch == "HEAD":
-            raise RuntimeError("Repozitář není na žádné větvi (detached HEAD). Aktualizujte ručně.")
+            raise RuntimeError(tr("updater_err_git_detached"))
 
-        self.progress.emit(25, f"Stahuji změny z GitHubu (git fetch origin {branch})...")
+        self.progress.emit(25, tr("updater_prog_git_fetch", branch=branch))
         self._run_git(["fetch", "origin", branch], repo, timeout=120)
 
-        self.progress.emit(50, "Aplikuji změny (fast-forward)...")
+        self.progress.emit(50, tr("updater_prog_git_apply"))
         self._run_git(["merge", "--ff-only", f"origin/{branch}"], repo)
 
         self._run_install_script(repo)
 
-        self.progress.emit(100, "Aktualizace dokončena!")
-        self.apply_finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován z repozitáře.")
+        self.progress.emit(100, tr("updater_prog_done"))
+        self.apply_finished.emit(True, tr("updater_success_git"))
 
     def _update_from_archive(self, target_dir: Path):
         """Download release tarball, validate it, then swap files in with automatic rollback."""
@@ -453,10 +445,10 @@ class UpdateApplyWorker(QThread):
             extract_dir = tmp_dir / "extracted"
             extract_dir.mkdir()
 
-            self.progress.emit(10, f"Stahuji archiv vydání ({tag})...")
+            self.progress.emit(10, tr("updater_prog_download_archive", tag=tag))
             self._download(archive_url, tmp_tar, 10, 45)
 
-            self.progress.emit(58, "Rozbaluji a ověřuji archiv...")
+            self.progress.emit(58, tr("updater_prog_extract"))
             with tarfile.open(tmp_tar, "r:gz") as tar:
                 try:
                     tar.extractall(path=extract_dir, filter="data")
@@ -465,14 +457,14 @@ class UpdateApplyWorker(QThread):
                     for m in tar.getmembers():
                         dest = (extract_dir / m.name).resolve()
                         if root not in dest.parents and dest != root:
-                            raise RuntimeError(f"Nebezpečná cesta v archivu: {m.name}")
+                            raise RuntimeError(tr("updater_err_unsafe_path", path=m.name))
                         if m.issym() or m.islnk():
-                            raise RuntimeError(f"Archiv obsahuje nepovolený odkaz: {m.name}")
+                            raise RuntimeError(tr("updater_err_symlink_denied", path=m.name))
                     tar.extractall(path=extract_dir)
 
             roots = [p for p in extract_dir.iterdir() if p.is_dir()]
             if len(roots) != 1:
-                raise RuntimeError("Neočekávaná struktura archivu aktualizace.")
+                raise RuntimeError(tr("updater_err_archive_structure"))
             src_root = roots[0]
 
             init_file = src_root / "wallhaven" / "__init__.py"
@@ -482,8 +474,7 @@ class UpdateApplyWorker(QThread):
             archive_ver = m.group(1) if m else ""
             if not is_newer_version(archive_ver, self.info.current_version):
                 raise RuntimeError(
-                    f"Archiv obsahuje verzi {archive_ver or '?'}, která není novější než "
-                    f"{self.info.current_version}. Aktualizace byla zrušena."
+                    tr("updater_err_archive_not_newer", archive_ver=archive_ver or '?', current=self.info.current_version)
                 )
 
             # Install new Python dependencies BEFORE touching any app files,
@@ -491,16 +482,16 @@ class UpdateApplyWorker(QThread):
             venv_pip = target_dir / ".venv" / "bin" / "pip"
             new_req = src_root / "requirements.txt"
             if venv_pip.is_file() and new_req.is_file():
-                self.progress.emit(65, "Instaluji Python závislosti...")
+                self.progress.emit(65, tr("updater_prog_deps"))
                 res = subprocess.run(
                     [str(venv_pip), "install", "-r", str(new_req), "--quiet"],
                     capture_output=True, text=True, timeout=600,
                 )
                 if res.returncode != 0:
                     tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
-                    raise RuntimeError(f"Instalace závislostí selhala (aplikace nebyla změněna):\n{tail}")
+                    raise RuntimeError(tr("updater_err_deps_failed", tail=tail))
 
-            self.progress.emit(80, "Nahrazuji soubory aplikace (se zálohou)...")
+            self.progress.emit(80, tr("updater_prog_replace_files"))
             self._swap_in(src_root, target_dir)
 
         self.progress.emit(92, "Aktualizuji ikony...")
@@ -513,8 +504,8 @@ class UpdateApplyWorker(QThread):
         except Exception:
             pass  # cosmetic only
 
-        self.progress.emit(100, "Aktualizace úspěšně dokončena!")
-        self.apply_finished.emit(True, "Komorebi Desktop byl úspěšně aktualizován.")
+        self.progress.emit(100, tr("updater_prog_done"))
+        self.apply_finished.emit(True, tr("updater_success_archive"))
 
     def _swap_in(self, src_root: Path, target_dir: Path):
         """Replace app files atomically-per-item; restore everything on any failure."""
@@ -708,10 +699,7 @@ class UpdateDialog(QDialog):
         """)
 
         # Clean markdown / release notes presentation
-        notes_text = self.info.release_notes.strip() if self.info.release_notes else (
-            f"Vydání {self.info.release_name}.\n"
-            "Obsahuje nejnovější opravy chyb, optimalizace a nová vylepšení pro Komorebi Desktop."
-        )
+        notes_text = self.info.release_notes.strip() if self.info.release_notes else tr("updater_default_notes", release=self.info.release_name)
         self.notes_box.setMarkdown(notes_text)
         layout.addWidget(self.notes_box, 1)
 
@@ -852,7 +840,7 @@ class UpdateDialog(QDialog):
             if sys.platform == "win32" and message.lower().endswith(".exe"):
                 # Windows installer ready
                 self._downloaded_installer_path = message
-                self.apply_btn.setText("🚀 Spustit instalátor a restartovat")
+                self.apply_btn.setText(tr("updater_btn_run_installer"))
             else:
                 self.apply_btn.setText(tr("update_btn_restart"))
 

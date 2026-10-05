@@ -235,10 +235,10 @@ class SidebarNavContainer(QWidget):
 
         # Explore feeds
         explore_items = [
-            ("wallhaven", "🌌", "Wallhaven", "HD & 4K tapety", ""),
-            ("moewalls", "🎬", "MoeWalls", "Živé video tapety", "LIVE"),
-            ("osu!", "🎯", "osu! Art", "Soutěžní ilustrace", ""),
-            ("pfps", "🎭", "Profilovky", "pfps.gg & GIFy", "NEW"),
+            ("wallhaven", "🌌", tr("tab_wallhaven"), tr("sidebar_wallhaven_sub") or "HD & 4K Wallpapers", ""),
+            ("moewalls", "🎬", tr("tab_moewalls"), tr("sidebar_moewalls_sub") or "Live Video Wallpapers", "LIVE"),
+            ("osu!", "🎯", tr("tab_osu"), tr("sidebar_osu_sub") or "Contest Artworks", ""),
+            ("pfps", "🎭", tr("tab_pfps"), tr("sidebar_pfps_sub") or "pfps.gg & GIFs", "NEW"),
         ]
 
         for mode_key, icon, title, subtitle, badge in explore_items:
@@ -252,7 +252,7 @@ class SidebarNavContainer(QWidget):
         self.main_layout.addSpacing(10)
 
         # 2. Section Header: Library
-        self.section_lib_lbl = QLabel(tr("nav_library").upper() if tr("nav_library") else "KNIHOVNA")
+        self.section_lib_lbl = QLabel(tr("nav_library").upper() if tr("nav_library") else "LIBRARY")
         self.section_lib_lbl.setStyleSheet("""
             color: #475569;
             font-size: 10px;
@@ -263,7 +263,7 @@ class SidebarNavContainer(QWidget):
         self.main_layout.addWidget(self.section_lib_lbl)
 
         # Installed / Local
-        item_inst = SidebarNavItem("installed", "💾", "Stažené", "Nainstalované tapety", "", self)
+        item_inst = SidebarNavItem("installed", "💾", tr("tab_installed"), tr("sidebar_installed_sub") or "Installed Wallpapers", "", self)
         item_inst.clicked.connect(lambda checked: self.select_mode("installed", user_click=True))
         self.main_layout.addWidget(item_inst)
         self.buttons["installed"] = item_inst
@@ -441,7 +441,7 @@ class KomorebiSidebar(QFrame):
             font-size: 8.5px;
             font-weight: 800;
         """)
-        self.ver_badge.setToolTip("Klikněte pro kontrolu aktualizací")
+        self.ver_badge.setToolTip(tr("update_badge_tip"))
         self.ver_badge.mousePressEvent = lambda e: self.update_clicked.emit()
         subtitle_row.addWidget(self.ver_badge)
         subtitle_row.addStretch()
@@ -473,7 +473,7 @@ class KomorebiSidebar(QFrame):
         bottom_box.setContentsMargins(4, 2, 4, 2)
 
         # Quick Theme Button
-        self.theme_btn = QPushButton("🎨  Téma")
+        self.theme_btn = QPushButton(f"🎨  {tr('theme_menu_title')}")
         self.theme_btn.setObjectName("sidebarUtilityBtn")
         self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.theme_btn.setFixedHeight(34)
@@ -481,7 +481,7 @@ class KomorebiSidebar(QFrame):
         bottom_box.addWidget(self.theme_btn)
 
         # Auto-wallpaper toggle
-        self.auto_wall_btn = QPushButton("🖼️  Auto-tapeta")
+        self.auto_wall_btn = QPushButton(f"🖼️  {tr('auto_wallpaper')}")
         self.auto_wall_btn.setObjectName("sidebarUtilityBtn")
         self.auto_wall_btn.setCheckable(True)
         self.auto_wall_btn.setChecked(config.auto_set_wallpaper)
@@ -493,7 +493,7 @@ class KomorebiSidebar(QFrame):
         bottom_box.addWidget(self.auto_wall_btn)
 
         # Settings Button
-        self.settings_btn = QPushButton("⚙️  Nastavení")
+        self.settings_btn = QPushButton(f"⚙️  {tr('settings_title')}")
         self.settings_btn.setObjectName("sidebarUtilityBtn")
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.setFixedHeight(34)
@@ -520,6 +520,7 @@ class KomorebiSidebar(QFrame):
             self.nav_container.buttons["installed"].set_badge(badge)
 
     def show_update_available(self, new_version: str):
+        self._new_version = new_version
         if hasattr(self, "ver_badge"):
             self.ver_badge.setText(f"✨ {new_version}")
             self.ver_badge.setStyleSheet("""
@@ -530,7 +531,7 @@ class KomorebiSidebar(QFrame):
                 font-size: 8.5px;
                 font-weight: 800;
             """)
-            self.ver_badge.setToolTip(f"K dispozici je nová verze {new_version}! Klikněte pro aktualizaci.")
+            self.ver_badge.setToolTip(tr("update_badge_available_tip", version=new_version))
 
     def set_auto_wall_checked(self, checked: bool):
         self.auto_wall_btn.setChecked(checked)
@@ -634,3 +635,8 @@ class KomorebiSidebar(QFrame):
             self._update_auto_wall_btn_style()
         if hasattr(self, "settings_btn"):
             self.settings_btn.setText(f"⚙️  {tr('settings_title') or 'Settings'}")
+        if hasattr(self, "ver_badge"):
+            if getattr(self, "_new_version", None):
+                self.ver_badge.setToolTip(tr("update_badge_available_tip", version=self._new_version))
+            else:
+                self.ver_badge.setToolTip(tr("update_badge_tip"))

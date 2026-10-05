@@ -34,7 +34,7 @@ sha256sums=('SKIP')
 
 pkgver() {
     cd "$srcdir/$_pkgname"
-    printf "1.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    printf "2.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {
@@ -47,10 +47,13 @@ package() {
     python -m installer --destdir="$pkgdir" dist/*.whl
 
     # Desktop shortcut
-    install -Dm644 wallhaven-desktop.desktop "$pkgdir/usr/share/applications/wallhaven-desktop.desktop"
+    install -Dm644 komorebi.desktop "$pkgdir/usr/share/applications/komorebi.desktop"
+    ln -s komorebi.desktop "$pkgdir/usr/share/applications/wallhaven-desktop.desktop"
 
     # Application icon
-    install -Dm644 assets/icon.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/wallhaven-desktop.png"
+    install -Dm644 assets/icon.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/komorebi.png"
+    ln -s komorebi.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/komorebi-desktop.png"
+    ln -s komorebi.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/wallhaven-desktop.png"
 
     # License
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

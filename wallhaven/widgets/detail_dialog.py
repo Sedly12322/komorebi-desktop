@@ -164,7 +164,7 @@ class DetailDialog(QDialog):
             controls.setContentsMargins(8, 0, 8, 8)
             controls.setSpacing(8)
 
-            self.play_pause_btn = QPushButton("⏸ Pozastavit")
+            self.play_pause_btn = QPushButton(tr("media_pause"))
             self.play_pause_btn.setFixedHeight(28)
             self.play_pause_btn.setStyleSheet("""
                 QPushButton {
@@ -185,7 +185,7 @@ class DetailDialog(QDialog):
             self.play_pause_btn.clicked.connect(self._toggle_playback)
             controls.addWidget(self.play_pause_btn)
 
-            self.mute_btn = QPushButton("🔇 Zvuk vypnut")
+            self.mute_btn = QPushButton(tr("audio_muted"))
             self.mute_btn.setFixedHeight(28)
             self.mute_btn.setStyleSheet("""
                 QPushButton {
@@ -208,9 +208,9 @@ class DetailDialog(QDialog):
 
             controls.addStretch()
 
-            live_tag = QLabel("🎬 ŽIVÝ NÁHLED (LOOP)")
-            live_tag.setStyleSheet("color: #06b6d4; font-size: 11px; font-weight: bold;")
-            controls.addWidget(live_tag)
+            self.live_tag = QLabel(tr("live_preview_loop"))
+            self.live_tag.setStyleSheet("color: #06b6d4; font-size: 11px; font-weight: bold;")
+            controls.addWidget(self.live_tag)
 
             v_layout.addLayout(controls)
             self.preview_stack.addWidget(video_box)
@@ -497,10 +497,10 @@ class DetailDialog(QDialog):
             return
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.player.pause()
-            self.play_pause_btn.setText("▶ Přehrát")
+            self.play_pause_btn.setText(tr("media_play"))
         else:
             self.player.play()
-            self.play_pause_btn.setText("⏸ Pozastavit")
+            self.play_pause_btn.setText(tr("media_pause"))
 
     def _toggle_mute(self):
         if not self.audio_output:
@@ -508,9 +508,9 @@ class DetailDialog(QDialog):
         is_muted = self.audio_output.isMuted()
         self.audio_output.setMuted(not is_muted)
         if not is_muted:
-            self.mute_btn.setText("🔇 Zvuk vypnut")
+            self.mute_btn.setText(tr("audio_muted"))
         else:
-            self.mute_btn.setText("🔊 Zvuk zapnut")
+            self.mute_btn.setText(tr("audio_unmuted"))
 
     def retranslate_ui(self):
         if getattr(self.item, "_osu_meta", None):
@@ -530,6 +530,19 @@ class DetailDialog(QDialog):
         self.open_folder_btn.setText(tr("open_folder_button"))
         self.uninstall_btn.setText(tr("uninstall_button_full"))
         self.tags_title_lbl.setText(tr("tags_title"))
+
+        if hasattr(self, "live_tag") and self.live_tag:
+            self.live_tag.setText(tr("live_preview_loop"))
+        if hasattr(self, "play_pause_btn") and self.play_pause_btn:
+            if hasattr(self, "player") and self.player and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+                self.play_pause_btn.setText(tr("media_pause"))
+            else:
+                self.play_pause_btn.setText(tr("media_play"))
+        if hasattr(self, "mute_btn") and self.mute_btn:
+            if hasattr(self, "audio_output") and self.audio_output and not self.audio_output.isMuted():
+                self.mute_btn.setText(tr("audio_unmuted"))
+            else:
+                self.mute_btn.setText(tr("audio_muted"))
 
         if hasattr(self, "colors_title_lbl") and self.colors_title_lbl:
             self.colors_title_lbl.setText(tr("meta_palette"))

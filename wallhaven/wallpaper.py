@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
+from wallhaven.i18n import tr
 
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".flv", ".wmv"}
 
@@ -54,7 +55,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "Hyprland Rice (set-wallpaper.sh)",
         "available": has_hypr_script,
         "supports_video": False,
-        "description": "Nativní skript profilu s automatickým Matugen & Quickshell přebarvením",
+        "description": tr("setter_desc_hypr_script"),
         "default_cmd": f"bash {hypr_script} '{{file}}'",
     })
 
@@ -65,7 +66,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "awww (Wayland)",
         "available": has_awww,
         "supports_video": False,
-        "description": "Moderní Wayland wallpaper démon s animovanými přechody",
+        "description": tr("setter_desc_awww"),
         "default_cmd": "awww img '{file}' --transition-type fade --transition-duration 1",
     })
 
@@ -78,7 +79,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "Quickshell (Serpantinum / Hyprland)",
         "available": has_qs,
         "supports_video": True,
-        "description": "Nativní podpora statických i video (.mp4) tapet přes Quickshell IPC",
+        "description": tr("setter_desc_quickshell"),
         "default_cmd": f'qs ipc -p "{qs_entry}" call wallpaper setWallpaper "all" "{{file}}" "fade"' if qs_entry else 'qs ipc call wallpaper setWallpaper "all" "{file}" "fade"',
     })
 
@@ -89,7 +90,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "mpvpaper (Wayland Live/Video)",
         "available": has_mpvpaper,
         "supports_video": True,
-        "description": "Přehrávání animovaných video tapet pro Wayland (Hyprland/Sway)",
+        "description": tr("setter_desc_mpvpaper"),
         "default_cmd": "pkill mpvpaper 2>/dev/null; mpvpaper -vs -o 'no-audio --loop' '*' '{file}' &",
     })
 
@@ -100,7 +101,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "swww (Wayland)",
         "available": has_swww,
         "supports_video": False,  # swww supports gif/apng, but not direct mp4/webm
-        "description": "Rychlý Wayland wallpaper démon s plynulými přechody",
+        "description": tr("setter_desc_swww"),
         "default_cmd": "swww img --transition-type grow '{file}'",
     })
 
@@ -111,7 +112,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "hyprpaper (Hyprland)",
         "available": has_hyprpaper,
         "supports_video": False,
-        "description": "Oficiální Hyprland wallpaper nástroj",
+        "description": tr("setter_desc_hyprpaper"),
         "default_cmd": "hyprctl hyprpaper preload '{file}' && hyprctl hyprpaper wallpaper ',{file}'",
     })
 
@@ -122,7 +123,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "waypaper (Wayland)",
         "available": has_waypaper,
         "supports_video": False,
-        "description": "Univerzální frontend pro Wayland tapety",
+        "description": tr("setter_desc_waypaper"),
         "default_cmd": "waypaper --wallpaper '{file}'",
     })
 
@@ -133,7 +134,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "swaybg (Wayland / Sway)",
         "available": has_swaybg,
         "supports_video": False,
-        "description": "Lehký wallpaper nástroj pro wlroots compository",
+        "description": tr("setter_desc_swaybg"),
         "default_cmd": "pkill swaybg 2>/dev/null; swaybg -i '{file}' -m fill &",
     })
 
@@ -148,7 +149,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "KDE Plasma (plasma-apply-wallpaperimage)",
         "available": has_plasma,
         "supports_video": False,
-        "description": "Standardní nástroj prostředí KDE Plasma",
+        "description": tr("setter_desc_plasma"),
         "default_cmd": "plasma-apply-wallpaperimage '{file}'",
     })
 
@@ -159,7 +160,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "GNOME (gsettings)",
         "available": has_gnome or shutil.which("gsettings") is not None,
         "supports_video": False,
-        "description": "Nastavení tapety pro světlý i tmavý režim v prostředí GNOME",
+        "description": tr("setter_desc_gnome"),
         "default_cmd": "gsettings set org.gnome.desktop.background picture-uri 'file://{file}' && gsettings set org.gnome.desktop.background picture-uri-dark 'file://{file}'",
     })
 
@@ -170,7 +171,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "Cinnamon (gsettings)",
         "available": has_cinnamon,
         "supports_video": False,
-        "description": "Prostředí Cinnamon Desktop",
+        "description": tr("setter_desc_cinnamon"),
         "default_cmd": "gsettings set org.cinnamon.desktop.background picture-uri 'file://{file}'",
     })
 
@@ -181,7 +182,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "MATE (gsettings)",
         "available": has_mate,
         "supports_video": False,
-        "description": "Prostředí MATE Desktop",
+        "description": tr("setter_desc_mate"),
         "default_cmd": "gsettings set org.mate.background picture-filename '{file}'",
     })
 
@@ -192,7 +193,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "XFCE (xfconf-query)",
         "available": has_xfce,
         "supports_video": False,
-        "description": "Prostředí XFCE 4",
+        "description": tr("setter_desc_xfce"),
         "default_cmd": 'xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "{file}"',
     })
 
@@ -203,7 +204,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "feh (X11)",
         "available": has_feh,
         "supports_video": False,
-        "description": "Rychlý a populární wallpaper setter pro X11 (i3, bspwm, openbox)",
+        "description": tr("setter_desc_feh"),
         "default_cmd": "feh --bg-fill '{file}'",
     })
 
@@ -214,7 +215,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "nitrogen (X11)",
         "available": has_nitrogen,
         "supports_video": False,
-        "description": "Grafický i CLI správce tapet pro X11",
+        "description": tr("setter_desc_nitrogen"),
         "default_cmd": "nitrogen --set-zoom-fill '{file}' --save",
     })
 
@@ -225,7 +226,7 @@ def get_available_wallpaper_setters() -> list[dict]:
         "name": "xwinwrap + mpv (X11 Live/Video)",
         "available": has_xwinwrap,
         "supports_video": True,
-        "description": "Přehrávání video tapet na pozadí v X11",
+        "description": tr("setter_desc_xwinwrap"),
         "default_cmd": "pkill -f 'mpv.*--wid' 2>/dev/null; xwinwrap -ov -fs -- mpv -wid WID --loop --no-audio '{file}' &",
     })
 
@@ -242,7 +243,7 @@ def detect_wallpaper_command(for_video: bool = False) -> list[str]:
             if shutil.which("lively") or shutil.which("Lively"):
                 return ["lively", "setwp", "--file", "{file}"]
             return []
-        return ["Nativní Windows API (SystemParametersInfoW)"]
+        return [tr("setter_desc_win_api")]
 
     qs_entry = find_quickshell_entry()
     qs_script = Path.home() / ".config/quickshell/ii/scripts/colors/switchwall.sh"
@@ -442,7 +443,7 @@ def _set_desktop_wallpaper_impl(
     Returns (success: bool, message: str).
     """
     if not os.path.exists(file_path):
-        return False, f"Soubor neexistuje: {file_path}"
+        return False, tr("wall_not_found_err", path=file_path)
 
     abs_path = str(Path(file_path).resolve())
     is_video = is_video_file(abs_path)
@@ -462,7 +463,7 @@ def _set_desktop_wallpaper_impl(
         if is_video:
             if shutil.which("lively"):
                 return _run_shell_cmd(f'lively setwp --file "{abs_path}"', abs_path)
-            return False, "Pro animované tapety ve Windows nainstalujte aplikaci Lively Wallpaper."
+            return False, tr("win_lively_req")
         try:
             import ctypes
             SPI_SETDESKWALLPAPER = 20
@@ -475,8 +476,8 @@ def _set_desktop_wallpaper_impl(
                 SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
             )
             if res:
-                return True, "Tapeta byla úspěšně nastavena."
-            return False, "Volání Windows API (SystemParametersInfoW) selhalo."
+                return True, tr("toast_wall_set_success")
+            return False, tr("win_api_fail")
         except Exception as e:
             return False, str(e)
 
@@ -488,16 +489,11 @@ def _set_desktop_wallpaper_impl(
     if is_video:
         cmd_template = detect_wallpaper_command(for_video=True)
         if not cmd_template:
-            # Fallback warning
-            return (
-                False,
-                "Detekována animovaná tapeta (.mp4), ale nebyl nalezen žádný přehrávač živých tapet "
-                "(např. Quickshell, mpvpaper). Pro Wayland nainstalujte: 'yay -S mpvpaper'.",
-            )
+            return False, tr("wall_no_video_player")
     else:
         cmd_template = detect_wallpaper_command(for_video=False)
         if not cmd_template:
-            return False, "Nebyl nalezen žádný podporovaný nástroj pro nastavení tapety."
+            return False, tr("wall_no_setter_found")
 
     # If using hyprpaper, preload first
     if len(cmd_template) > 0 and "hyprpaper" in cmd_template[0]:
@@ -516,8 +512,8 @@ def _set_desktop_wallpaper_impl(
         try:
             subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{abs_path}"], timeout=5)
             subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{abs_path}"], timeout=5)
-            _send_notification("Tapeta změněna", f"Tapeta byla nastavena na: {os.path.basename(abs_path)}")
-            return True, "Tapeta byla úspěšně nastavena."
+            _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+            return True, tr("toast_wall_set_success")
         except Exception as e:
             return False, str(e)
 
@@ -531,9 +527,9 @@ def _set_desktop_wallpaper_impl(
             timeout=20,
         )
         if res.returncode == 0:
-            _send_notification("Tapeta změněna", f"Tapeta byla nastavena na: {os.path.basename(abs_path)}")
-            return True, "Tapeta byla úspěšně nastavena."
-        return False, f"Příkaz selhal: {res.stderr.strip()}"
+            _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+            return True, tr("toast_wall_set_success")
+        return False, tr("cmd_failed_err", error=res.stderr.strip())
     except Exception as e:
         return False, str(e)
 
@@ -543,45 +539,45 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     if setter_id == "quickshell":
         qs_entry = find_quickshell_entry()
         if not qs_entry:
-            return False, "Quickshell nebyl v systému nalezen."
+            return False, tr("quickshell_not_found")
         cmd = ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", abs_path, "fade"]
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
             if res.returncode == 0:
-                _send_notification("Tapeta změněna", f"Quickshell nastavil tapetu: {os.path.basename(abs_path)}")
-                return True, "Tapeta byla úspěšně nastavena přes Quickshell."
-            return False, f"Quickshell IPC selhal: {res.stderr.strip()}"
+                _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+                return True, tr("quickshell_set_success")
+            return False, tr("cmd_failed_err", error=res.stderr.strip())
         except Exception as e:
             return False, str(e)
 
     elif setter_id == "mpvpaper":
         if not shutil.which("mpvpaper"):
-            return False, "Nástroj 'mpvpaper' není nainstalován. Nainstalujte jej např. příkazem 'yay -S mpvpaper'."
+            return False, tr("mpvpaper_not_installed")
         cmd_str = f"pkill mpvpaper 2>/dev/null; mpvpaper -vs -o 'no-audio --loop' '*' '{abs_path}' &"
         return _run_shell_cmd(cmd_str, abs_path)
 
     elif setter_id == "hyprpaper":
         if not shutil.which("hyprpaper") or not shutil.which("hyprctl"):
-            return False, "Nástroj 'hyprpaper' nebo 'hyprctl' není nainstalován."
+            return False, tr("hyprpaper_not_installed")
         subprocess.run(["hyprctl", "hyprpaper", "preload", abs_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         cmd = ["hyprctl", "hyprpaper", "wallpaper", f",{abs_path}"]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "swww":
         if not shutil.which("swww"):
-            return False, "Nástroj 'swww' není nainstalován."
+            return False, tr("swww_not_installed")
         cmd = ["swww", "img", "--transition-type", "grow", abs_path]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "swaybg":
         if not shutil.which("swaybg"):
-            return False, "Nástroj 'swaybg' není nainstalován."
+            return False, tr("swaybg_not_installed")
         cmd_str = f"pkill swaybg 2>/dev/null; swaybg -i '{abs_path}' -m fill &"
         return _run_shell_cmd(cmd_str, abs_path)
 
     elif setter_id == "waypaper":
         if not shutil.which("waypaper"):
-            return False, "Nástroj 'waypaper' není nainstalován."
+            return False, tr("waypaper_not_installed")
         cmd = ["waypaper", "--wallpaper", abs_path]
         return _run_cmd_list(cmd, abs_path)
 
@@ -589,16 +585,16 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
         if shutil.which("plasma-apply-wallpaperimage"):
             cmd = ["plasma-apply-wallpaperimage", abs_path]
             return _run_cmd_list(cmd, abs_path)
-        return False, "Nástroj 'plasma-apply-wallpaperimage' nebyl nalezen."
+        return False, tr("plasma_not_found")
 
     elif setter_id == "gnome":
         if not shutil.which("gsettings"):
-            return False, "Příkaz 'gsettings' není k dispozici."
+            return False, tr("gsettings_not_found")
         try:
             subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", f"file://{abs_path}"], timeout=5)
             subprocess.run(["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", f"file://{abs_path}"], timeout=5)
-            _send_notification("Tapeta změněna", f"Tapeta byla nastavena na: {os.path.basename(abs_path)}")
-            return True, "Tapeta byla úspěšně nastavena pro GNOME."
+            _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+            return True, tr("gnome_set_success")
         except Exception as e:
             return False, str(e)
 
@@ -616,23 +612,23 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
 
     elif setter_id == "feh":
         if not shutil.which("feh"):
-            return False, "Nástroj 'feh' není nainstalován."
+            return False, tr("feh_not_installed")
         cmd = ["feh", "--bg-fill", abs_path]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "nitrogen":
         if not shutil.which("nitrogen"):
-            return False, "Nástroj 'nitrogen' není nainstalován."
+            return False, tr("nitrogen_not_installed")
         cmd = ["nitrogen", "--set-zoom-fill", abs_path, "--save"]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "xwinwrap":
         if not shutil.which("xwinwrap") or not shutil.which("mpv"):
-            return False, "Nástroje 'xwinwrap' nebo 'mpv' nejsou nainstalovány."
+            return False, tr("xwinwrap_not_installed")
         cmd_str = f"pkill -f 'mpv.*--wid' 2>/dev/null; xwinwrap -ov -fs -- mpv -wid WID --loop --no-audio '{abs_path}' &"
         return _run_shell_cmd(cmd_str, abs_path)
 
-    return False, f"Neznámý setter: {setter_id}"
+    return False, tr("unknown_setter", setter=setter_id)
 
 
 def _run_shell_cmd(cmd_str: str, abs_path: str) -> Tuple[bool, str]:
@@ -646,9 +642,9 @@ def _run_shell_cmd(cmd_str: str, abs_path: str) -> Tuple[bool, str]:
             timeout=15,
         )
         if res.returncode == 0:
-            _send_notification("Tapeta změněna", f"Tapeta byla nastavena na: {os.path.basename(abs_path)}")
-            return True, "Tapeta byla úspěšně nastavena."
-        return False, f"Příkaz selhal ({res.returncode}): {res.stderr.strip()}"
+            _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+            return True, tr("toast_wall_set_success")
+        return False, tr("cmd_failed_err", error=f"({res.returncode}): {res.stderr.strip()}")
     except Exception as e:
         return False, str(e)
 
@@ -663,9 +659,9 @@ def _run_cmd_list(cmd: list[str], abs_path: str) -> Tuple[bool, str]:
             timeout=15,
         )
         if res.returncode == 0:
-            _send_notification("Tapeta změněna", f"Tapeta byla nastavena na: {os.path.basename(abs_path)}")
-            return True, "Tapeta byla úspěšně nastavena."
-        return False, f"Příkaz selhal ({res.returncode}): {res.stderr.strip()}"
+            _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+            return True, tr("toast_wall_set_success")
+        return False, tr("cmd_failed_err", error=f"({res.returncode}): {res.stderr.strip()}")
     except Exception as e:
         return False, str(e)
 
