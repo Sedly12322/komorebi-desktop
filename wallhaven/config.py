@@ -58,6 +58,8 @@ DEFAULT_CONFIG = {
     "moewalls_category": "all",
     "language": "en",
     "background_effects": True,
+    "check_updates_on_launch": True,
+    "last_update_check": 0.0,
 }
 
 
@@ -178,6 +180,22 @@ class Config:
     @background_effects.setter
     def background_effects(self, val: bool):
         self.set("background_effects", bool(val))
+
+    @property
+    def check_updates_on_launch(self) -> bool:
+        return bool(self._config.get("check_updates_on_launch", True))
+
+    @check_updates_on_launch.setter
+    def check_updates_on_launch(self, val: bool):
+        self.set("check_updates_on_launch", bool(val))
+
+    @property
+    def last_update_check(self) -> float:
+        return float(self._config.get("last_update_check", 0.0))
+
+    @last_update_check.setter
+    def last_update_check(self, val: float):
+        self.set("last_update_check", float(val))
 
 
 config = Config()

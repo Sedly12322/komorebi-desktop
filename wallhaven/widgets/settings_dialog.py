@@ -27,6 +27,8 @@ from wallhaven.wallpaper import (
     get_available_wallpaper_setters,
     set_desktop_wallpaper,
 )
+from wallhaven import __version__
+from wallhaven.updater import UpdateCheckWorker, UpdateDialog, UpdateInfo
 from wallhaven.i18n import tr, i18n
 
 
@@ -37,6 +39,8 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(620)
         self.setModal(True)
         self._all_setters = get_available_wallpaper_setters()
+        self.check_worker: UpdateCheckWorker | None = None
+        self.latest_update_info: UpdateInfo | None = None
         self._init_ui()
         i18n.language_changed.connect(self.retranslate_ui)
 
@@ -245,6 +249,45 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(self.cache_group)
 
+        # 6. Updates Section
+        self.update_group = QGroupBox(tr("update_section"))
+        self._apply_group_style(self.update_group)
+        update_layout = QVBoxLayout(self.update_group)
+        update_layout.setSpacing(10)
+
+        up_row1 = QHBoxLayout()
+        self.cur_ver_lbl = QLabel(f"Komorebi Desktop v{__version__}")
+        self.cur_ver_lbl.setStyleSheet("color: #f1f5f9; font-weight: 700; font-size: 12.5px;")
+        up_row1.addWidget(self.cur_ver_lbl)
+
+        up_row1.addStretch()
+
+        self.check_update_btn = QPushButton(tr("update_check_btn"))
+        self.check_update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.check_update_btn.clicked.connect(self._on_check_updates)
+        up_row1.addWidget(self.check_update_btn)
+
+        self.apply_update_btn = QPushButton(tr("update_btn_apply"))
+        self.apply_update_btn.setObjectName("primaryButton")
+        self.apply_update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.apply_update_btn.setVisible(False)
+        self.apply_update_btn.clicked.connect(self._on_open_update_dialog)
+        up_row1.addWidget(self.apply_update_btn)
+
+        update_layout.addLayout(up_row1)
+
+        self.update_status_lbl = QLabel("")
+        self.update_status_lbl.setStyleSheet("color: #94a3b8; font-size: 11.5px;")
+        self.update_status_lbl.setWordWrap(True)
+        update_layout.addWidget(self.update_status_lbl)
+
+        self.auto_check_cb = QCheckBox(tr("update_auto_check"))
+        self.auto_check_cb.setChecked(config.check_updates_on_launch)
+        self.auto_check_cb.setStyleSheet("color: #cbd5e1; font-size: 12px; margin-top: 2px;")
+        update_layout.addWidget(self.auto_check_cb)
+
+        layout.addWidget(self.update_group)
+
         layout.addStretch()
 
         # Action Buttons
@@ -373,8 +416,49 @@ class SettingsDialog(QDialog):
         self.cache_group.setTitle(tr("cache_group"))
         self.cache_size_lbl.setText(self._get_cache_size_str())
         self.clear_cache_btn.setText(tr("cache_clear_button"))
+        if hasattr(self, "update_group"):
+            self.update_group.setTitle(tr("update_section"))
+            self.cur_ver_lbl.setText(f"Komorebi Desktop v{__version__}")
+            self.check_update_btn.setText(tr("update_check_btn"))
+            self.auto_check_cb.setText(tr("update_auto_check"))
         self.cancel_btn.setText(tr("btn_cancel"))
         self.save_btn.setText(tr("btn_save"))
+
+    def _on_check_updates(self):
+        self.check_update_btn.setEnabled(False)
+        self.update_status_lbl.setText(tr("update_checking"))
+        self.update_status_lbl.setStyleSheet("color: #a5b4fc; font-size: 11.5px;")
+        self.check_worker = UpdateCheckWorker(current_ver=__version__, parent=self)
+        self.check_worker.check_finished.connect(self._on_check_finished)
+        self.check_worker.check_failed.connect(self._on_check_failed)
+        self.check_worker.start()
+
+    def _on_check_finished(self, info: UpdateInfo):
+        self.check_update_btn.setEnabled(True)
+        self.latest_update_info = info
+        if info.has_update:
+            self.update_status_lbl.setText(tr("update_available_status", version=info.latest_version))
+            self.update_status_lbl.setStyleSheet("color: #34d399; font-weight: 700; font-size: 11.5px;")
+            self.apply_update_btn.setVisible(True)
+            self.apply_update_btn.setText(f"⬇️ {tr('update_banner_apply')} ({info.latest_version})")
+        else:
+            self.update_status_lbl.setText(tr("update_latest_status", version=__version__))
+            self.update_status_lbl.setStyleSheet("color: #38bdf8; font-weight: 600; font-size: 11.5px;")
+            self.apply_update_btn.setVisible(True)
+            self.apply_update_btn.setText(f"📋 {tr('update_banner_notes')}")
+
+    def _on_check_failed(self, error: str):
+        self.check_update_btn.setEnabled(True)
+        self.update_status_lbl.setText(tr("update_check_error", error=error))
+        self.update_status_lbl.setStyleSheet("color: #f87171; font-size: 11.5px;")
+
+    def _on_open_update_dialog(self):
+        if not self.latest_update_info:
+            info = UpdateInfo(current_version=__version__, latest_version=f"v{__version__}")
+        else:
+            info = self.latest_update_info
+        dlg = UpdateDialog(info, self)
+        dlg.exec()
 
     def _toggle_api_visibility(self):
         if self.api_key_input.echoMode() == QLineEdit.EchoMode.Password:
@@ -426,5 +510,7 @@ class SettingsDialog(QDialog):
         config.set("theme", self.theme_combo.currentData() or "dark")
         if hasattr(self, "bg_effects_cb"):
             config.background_effects = self.bg_effects_cb.isChecked()
+        if hasattr(self, "auto_check_cb"):
+            config.check_updates_on_launch = self.auto_check_cb.isChecked()
         config.save()
         self.accept()

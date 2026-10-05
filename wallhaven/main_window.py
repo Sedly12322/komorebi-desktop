@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl, QPoint
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl, QPoint, QTimer
 from PyQt6.QtGui import QIcon, QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QMainWindow,
@@ -43,6 +43,8 @@ from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
 from wallhaven.styles import get_available_themes, apply_theme, get_palette, get_asset_path
+from wallhaven import __version__
+from wallhaven.updater import UpdateCheckWorker, UpdateDialog, UpdateBanner, UpdateInfo
 
 
 class SearchWorker(QThread):
@@ -155,6 +157,8 @@ class MainWindow(QMainWindow):
         self.current_color = ""
         self.active_search_worker: SearchWorker | OsuSearchWorker | None = None
         self.quick_download_worker: DownloadWorker | None = None
+        self.update_check_worker: UpdateCheckWorker | None = None
+        self.latest_update_info: UpdateInfo | None = None
 
         app = QApplication.instance()
         if app and not app.styleSheet():
@@ -163,6 +167,10 @@ class MainWindow(QMainWindow):
         self._init_ui()
         i18n.language_changed.connect(self.retranslate_ui)
         self.perform_search(page=1)
+
+        # Check for updates in background on launch if enabled
+        if config.check_updates_on_launch:
+            QTimer.singleShot(2500, self._check_updates_quietly)
 
     def _init_ui(self):
         central_widget = QWidget()
@@ -177,6 +185,7 @@ class MainWindow(QMainWindow):
         self.sidebar.theme_clicked.connect(self._show_quick_theme_menu)
         self.sidebar.auto_wall_toggled.connect(self._on_auto_wall_toggled)
         self.sidebar.settings_clicked.connect(self._open_settings)
+        self.sidebar.update_clicked.connect(self._open_update_dialog)
         root_layout.addWidget(self.sidebar)
 
         # Compatibility references
@@ -197,7 +206,19 @@ class MainWindow(QMainWindow):
         self.canvas_vlayout.setSpacing(0)
         root_layout.addWidget(self.content_canvas, 1)
 
-        # 2A. Spotlight Search Bar (at the top of canvas)
+        # 2A. Floating update notification banner (when new release is detected)
+        self.banner_container = QWidget()
+        b_layout = QVBoxLayout(self.banner_container)
+        b_layout.setContentsMargins(18, 10, 18, 0)
+        b_layout.setSpacing(0)
+        self.update_banner = UpdateBanner(self)
+        self.update_banner.update_clicked.connect(self._open_update_dialog)
+        self.update_banner.dismissed.connect(lambda: self.banner_container.setVisible(False))
+        b_layout.addWidget(self.update_banner)
+        self.banner_container.setVisible(False)
+        self.canvas_vlayout.addWidget(self.banner_container)
+
+        # 2B. Spotlight Search Bar (at the top of canvas)
         self.spotlight_bar = QFrame()
         self.spotlight_bar.setObjectName("spotlightBar")
         s_layout = QHBoxLayout(self.spotlight_bar)
@@ -856,6 +877,9 @@ class MainWindow(QMainWindow):
         else:
             self.total_count_lbl.setText(tr("total_found", total=f"{self.total_count:,}"))
 
+        if hasattr(self, "update_banner") and self.update_banner.isVisible() and self.latest_update_info:
+            self.update_banner.show_update(self.latest_update_info)
+
     def _set_mode(self, mode: str):
         if hasattr(self, "sidebar"):
             self.sidebar.set_mode(mode)
@@ -978,6 +1002,31 @@ class MainWindow(QMainWindow):
                 self.content_canvas.set_effects_enabled(config.background_effects)
             # If API key changed, refresh
             self.perform_search(page=self.current_page)
+
+    def _check_updates_quietly(self):
+        """Asynchronously checks GitHub for updates after app startup."""
+        self.update_check_worker = UpdateCheckWorker(current_ver=__version__, parent=self)
+        self.update_check_worker.check_finished.connect(self._on_quiet_update_check_finished)
+        self.update_check_worker.start()
+
+    def _on_quiet_update_check_finished(self, info: UpdateInfo):
+        self.latest_update_info = info
+        if info.has_update:
+            if hasattr(self, "banner_container"):
+                self.banner_container.setVisible(True)
+            if hasattr(self, "update_banner"):
+                self.update_banner.show_update(info)
+            if hasattr(self, "sidebar"):
+                self.sidebar.show_update_available(info.latest_version)
+
+    def _open_update_dialog(self, info: UpdateInfo | None = None):
+        """Opens the full-featured update dialog."""
+        if not isinstance(info, UpdateInfo):
+            info = self.latest_update_info
+        if not info:
+            info = UpdateInfo(current_version=__version__, latest_version=f"v{__version__}")
+        dlg = UpdateDialog(info, self)
+        dlg.exec()
 
     def _on_auto_wall_toggled(self):
         config.auto_set_wallpaper = self.auto_wall_btn.isChecked()

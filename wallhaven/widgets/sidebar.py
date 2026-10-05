@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QMenu,
 )
+from wallhaven import __version__
 from wallhaven.i18n import tr
 from wallhaven.config import config
 from wallhaven.styles import get_available_themes, apply_theme, get_palette, get_asset_path
@@ -365,6 +366,7 @@ class KomorebiSidebar(QFrame):
     theme_clicked = pyqtSignal()
     settings_clicked = pyqtSignal()
     auto_wall_toggled = pyqtSignal(bool)
+    update_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -429,16 +431,19 @@ class KomorebiSidebar(QFrame):
         brand_sub.setStyleSheet("font-size: 9.5px; color: #64748b; font-weight: 600;")
         subtitle_row.addWidget(brand_sub)
 
-        ver_badge = QLabel("v2.0")
-        ver_badge.setStyleSheet("""
+        self.ver_badge = QLabel(f"v{__version__}")
+        self.ver_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ver_badge.setStyleSheet("""
             background: rgba(99, 102, 241, 0.2);
             color: #a5b4fc;
             border-radius: 4px;
-            padding: 1px 4px;
+            padding: 1px 5px;
             font-size: 8.5px;
             font-weight: 800;
         """)
-        subtitle_row.addWidget(ver_badge)
+        self.ver_badge.setToolTip("Klikněte pro kontrolu aktualizací")
+        self.ver_badge.mousePressEvent = lambda e: self.update_clicked.emit()
+        subtitle_row.addWidget(self.ver_badge)
         subtitle_row.addStretch()
         title_box.addLayout(subtitle_row)
 
@@ -513,6 +518,19 @@ class KomorebiSidebar(QFrame):
         if "installed" in self.nav_container.buttons:
             badge = str(count) if count > 0 else ""
             self.nav_container.buttons["installed"].set_badge(badge)
+
+    def show_update_available(self, new_version: str):
+        if hasattr(self, "ver_badge"):
+            self.ver_badge.setText(f"✨ {new_version}")
+            self.ver_badge.setStyleSheet("""
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #06b6d4);
+                color: #ffffff;
+                border-radius: 4px;
+                padding: 1px 6px;
+                font-size: 8.5px;
+                font-weight: 800;
+            """)
+            self.ver_badge.setToolTip(f"K dispozici je nová verze {new_version}! Klikněte pro aktualizaci.")
 
     def set_auto_wall_checked(self, checked: bool):
         self.auto_wall_btn.setChecked(checked)
