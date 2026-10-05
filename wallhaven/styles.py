@@ -26,6 +26,14 @@ _CHEVRON_NORMAL = str(_ASSETS_DIR / "chevron_down.png").replace("\\", "/")
 _CHEVRON_HOVER = str(_ASSETS_DIR / "chevron_down_hover.png").replace("\\", "/")
 
 
+def _tr_theme(key: str, default: str) -> str:
+    try:
+        from wallhaven.i18n import tr
+        return tr(key)
+    except Exception:
+        return default
+
+
 def get_asset_path(filename: str) -> Path:
     """Finds an asset across bundled environments, local paths, and system icon directories."""
     # 1. PyInstaller bundle
@@ -339,7 +347,7 @@ def _parse_flat_matugen_json(data: dict) -> Optional[Dict[str, str]]:
     text_muted = data.get("outline") or "#a08c8b"
 
     return {
-        "name": "🪄 Matugen (Systémové barvy)",
+        "name": _tr_theme("theme_matugen", "🪄 System Colors (Matugen / Auto)"),
         "bg_base": bg_base,
         "bg_surface": bg_surface,
         "bg_subsurface": bg_subsurface,
@@ -396,7 +404,7 @@ def _parse_standard_matugen_json(data: dict) -> Optional[Dict[str, str]]:
         text_muted = get_c("outline", "#8d9199")
 
         return {
-            "name": "🪄 Matugen (Systémové barvy)",
+            "name": _tr_theme("theme_matugen", "🪄 System Colors (Matugen / Auto)"),
             "bg_base": bg_base,
             "bg_surface": bg_surface,
             "bg_subsurface": bg_subsurface,
@@ -567,7 +575,7 @@ def _get_matugen_palette() -> Optional[Dict[str, str]]:
                     accent_text = bg_base if _is_light_color(accent) else "#ffffff"
 
                     return {
-                        "name": "🪄 Matugen (Systémové barvy)",
+                        "name": _tr_theme("theme_matugen", "🪄 System Colors (Matugen / Auto)"),
                         "bg_base": bg_base,
                         "bg_surface": bg_surface,
                         "bg_subsurface": bg_surface,
@@ -651,7 +659,7 @@ def _get_gtk_palette() -> Optional[Dict[str, str]]:
                     card_bg = colors.get("card_bg_color", bg)
                     accent_fg = colors.get("accent_fg_color") or (bg if _is_light_color(accent) else "#ffffff")
                     return {
-                        "name": "🐧 GTK (Systémové téma)",
+                        "name": _tr_theme("theme_gtk", "🐧 GTK (System Theme)"),
                         "bg_base": bg,
                         "bg_surface": header_bg,
                         "bg_subsurface": bg,
@@ -696,7 +704,7 @@ def _get_kde_palette() -> Optional[Dict[str, str]]:
             accent_text = sel.get("foregroundnormal", "#ffffff")
             btn_bg = btn.get("backgroundnormal", "#26282b")
             return {
-                "name": "❄️ KDE Plasma (Systémové barvy)",
+                "name": _tr_theme("theme_kde", "❄️ KDE Plasma (System Colors)"),
                 "bg_base": bg_base,
                 "bg_surface": btn_bg,
                 "bg_subsurface": bg_base,
@@ -778,7 +786,7 @@ def _get_pywal_palette() -> Optional[Dict[str, str]]:
         accent = c.get("color4", "#6366f1")
         accent_alt = c.get("color5", "#818cf8")
         return {
-            "name": "🎨 Pywal (Systémové barvy tapety)",
+            "name": _tr_theme("theme_pywal", "🎨 Pywal (Wallpaper Colors)"),
             "bg_base": bg,
             "bg_surface": c.get("color0", "#181818"),
             "bg_subsurface": bg,
@@ -840,7 +848,7 @@ def get_palette(theme_id: str = "dark") -> Dict[str, str]:
         sys_accent = _detect_linux_system_accent()
         if sys_accent:
             base = dict(THEME_PALETTES["dark"])
-            base["name"] = "🐧 Systémové barvy (Accent)"
+            base["name"] = _tr_theme("theme_accent", "🐧 System Colors (Accent)")
             base["accent"] = sys_accent
             base["accent_hover"] = sys_accent
             base["accent_gradient_start"] = sys_accent

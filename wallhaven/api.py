@@ -6,7 +6,7 @@ import requests
 from wallhaven.config import config
 
 API_BASE_URL = "https://wallhaven.cc/api/v1"
-USER_AGENT = "WallhavenDesktop/1.0 (Arch Linux; Wayland/X11)"
+USER_AGENT = "KomorebiDesktop/2.0 (High-Performance Wallpaper Manager)"
 
 
 @dataclass

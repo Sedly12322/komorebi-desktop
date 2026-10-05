@@ -7,7 +7,7 @@ from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal, pyqtSlot, 
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QPainterPath
 from wallhaven.cache import cache
 
-USER_AGENT = "WallhavenDesktop/1.2 (Arch Linux; High-Performance Wallpaper Manager)"
+USER_AGENT = "KomorebiDesktop/2.0 (High-Performance Wallpaper Manager)"
 
 # Shared pooled HTTP session for high-speed parallel downloads with keep-alive
 http_session = requests.Session()

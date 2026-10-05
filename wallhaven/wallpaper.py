@@ -47,6 +47,29 @@ def get_available_wallpaper_setters() -> list[dict]:
     """
     setters = []
 
+    if sys.platform == "win32":
+        # Windows Native API (SystemParametersInfoW)
+        setters.append({
+            "id": "win_api",
+            "name": "Windows API (SystemParametersInfoW)",
+            "available": True,
+            "supports_video": False,
+            "description": tr("setter_desc_win_api"),
+            "default_cmd": "SystemParametersInfoW",
+        })
+
+        # Lively Wallpaper CLI
+        has_lively = shutil.which("lively") is not None or shutil.which("Lively") is not None
+        setters.append({
+            "id": "win_lively",
+            "name": "Lively Wallpaper CLI",
+            "available": has_lively,
+            "supports_video": True,
+            "description": tr("setter_desc_win_lively"),
+            "default_cmd": "lively setwp --file '{file}'",
+        })
+        return setters
+
     # 0. Hyprland Rice Script (set-wallpaper.sh)
     hypr_script = Path.home() / ".config/hypr/scripts/set-wallpaper.sh"
     has_hypr_script = hypr_script.exists() and os.access(hypr_script, os.X_OK)
@@ -458,11 +481,16 @@ def _set_desktop_wallpaper_impl(
         cmd_str = custom_cmd.replace("{file}", f'"{abs_path}"')
         return _run_shell_cmd(cmd_str, abs_path)
 
-    # 3. Windows Native API (for static images)
+    # 3. Explicit setter selected
+    if setter_id and setter_id not in ("auto", "automaticky", "custom", "vlastni"):
+        return _apply_specific_setter(setter_id, abs_path, is_video)
+
+    # 4. Windows Native API (fallback for auto on Windows)
     if sys.platform == "win32":
         if is_video:
-            if shutil.which("lively"):
-                return _run_shell_cmd(f'lively setwp --file "{abs_path}"', abs_path)
+            if shutil.which("lively") or shutil.which("Lively"):
+                cmd = "lively" if shutil.which("lively") else "Lively"
+                return _run_shell_cmd(f'{cmd} setwp --file "{abs_path}"', abs_path)
             return False, tr("win_lively_req")
         try:
             import ctypes
@@ -480,10 +508,6 @@ def _set_desktop_wallpaper_impl(
             return False, tr("win_api_fail")
         except Exception as e:
             return False, str(e)
-
-    # 4. Explicit setter selected
-    if setter_id and setter_id not in ("auto", "automaticky", "custom", "vlastni"):
-        return _apply_specific_setter(setter_id, abs_path, is_video)
 
     # 5. Linux Automatic Detection
     if is_video:
@@ -627,6 +651,30 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
             return False, tr("xwinwrap_not_installed")
         cmd_str = f"pkill -f 'mpv.*--wid' 2>/dev/null; xwinwrap -ov -fs -- mpv -wid WID --loop --no-audio '{abs_path}' &"
         return _run_shell_cmd(cmd_str, abs_path)
+
+    elif setter_id == "win_api":
+        try:
+            import ctypes
+            SPI_SETDESKWALLPAPER = 20
+            SPIF_UPDATEINIFILE = 0x01
+            SPIF_SENDCHANGE = 0x02
+            res = ctypes.windll.user32.SystemParametersInfoW(
+                SPI_SETDESKWALLPAPER,
+                0,
+                abs_path,
+                SPIF_UPDATEINIFILE | SPIF_SENDCHANGE,
+            )
+            if res:
+                return True, tr("toast_wall_set_success")
+            return False, tr("win_api_fail")
+        except Exception as e:
+            return False, str(e)
+
+    elif setter_id == "win_lively":
+        if shutil.which("lively") or shutil.which("Lively"):
+            cmd = "lively" if shutil.which("lively") else "Lively"
+            return _run_shell_cmd(f'{cmd} setwp --file "{abs_path}"', abs_path)
+        return False, tr("win_lively_req")
 
     return False, tr("unknown_setter", setter=setter_id)
 

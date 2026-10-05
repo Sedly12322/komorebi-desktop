@@ -30,7 +30,12 @@ def test_critical_keys_exist_in_all_languages():
         "updater_err_sha256_mismatch",
         "ratio_any",
         "theme_matugen",
+        "theme_gtk",
+        "theme_kde",
+        "theme_accent",
         "theme_pywal",
+        "setter_desc_win_api",
+        "setter_desc_win_lively",
     ]
 
     for key in critical:
