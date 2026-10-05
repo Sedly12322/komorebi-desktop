@@ -423,6 +423,17 @@ def _parse_standard_matugen_json(data: dict) -> Optional[Dict[str, str]]:
 
 def _detect_current_wallpaper_image() -> Optional[str]:
     """Tries to find current desktop wallpaper image path for Matugen."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop") as key:
+                val, _ = winreg.QueryValueEx(key, "Wallpaper")
+                if val and os.path.exists(val):
+                    return val
+        except Exception:
+            pass
+        return None
+
     # 1. Check direct rice / desktop cache files
     cache_candidates = [
         Path.home() / ".cache/sedly-rice/current_wallpaper",
@@ -712,7 +723,20 @@ def _get_kde_palette() -> Optional[Dict[str, str]]:
 
 
 def _detect_linux_system_accent() -> Optional[str]:
-    """Detect GNOME / GTK / Desktop accent color on Linux if available."""
+    """Detect GNOME / GTK / Desktop accent color on Linux or Windows DWM accent."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\DWM") as key:
+                val, _ = winreg.QueryValueEx(key, "AccentColor")
+                r = val & 0xFF
+                g = (val >> 8) & 0xFF
+                b = (val >> 16) & 0xFF
+                return f"#{r:02x}{g:02x}{b:02x}"
+        except Exception:
+            pass
+        return None
+
     try:
         res = subprocess.run(
             ["gsettings", "get", "org.gnome.desktop.interface", "accent-color"],

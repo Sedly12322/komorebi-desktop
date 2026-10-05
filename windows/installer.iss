@@ -1,9 +1,9 @@
 ; Inno Setup Script for Komorebi Desktop
 #define MyAppName "Komorebi Desktop"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Sedly12322"
 #define MyAppURL "https://github.com/Sedly12322/wallhaven-desktop"
-#define MyAppExeName "Wallhaven-Desktop.exe"
+#define MyAppExeName "Komorebi-Desktop.exe"
 
 [Setup]
 AppId={{E8D7B32F-6A24-4B39-81FE-B9D1154CF690}
@@ -17,7 +17,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=Wallhaven-Desktop-Setup
+OutputBaseFilename=Komorebi-Desktop-Setup
 SetupIconFile=..\assets\icon.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -33,7 +33,7 @@ Name: "czech"; MessagesFile: "compiler:Languages\Czech.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\dist\Wallhaven-Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\Komorebi-Desktop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

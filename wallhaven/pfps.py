@@ -183,6 +183,12 @@ class PfpsClient:
 
             target_path = dest_dir / item.filename
 
+            # If already cached locally, copy directly without redundant network fetch
+            cache_file = self._cache_dir / item.filename
+            if cache_file.exists() and cache_file.stat().st_size > 0:
+                shutil.copyfile(cache_file, target_path)
+                return True, str(target_path)
+
             req = urllib.request.Request(item.image_url, headers={"User-Agent": self.USER_AGENT})
             with urllib.request.urlopen(req, timeout=20) as resp, open(target_path, "wb") as f:
                 f.write(resp.read())
@@ -204,6 +210,20 @@ class PfpsClient:
                     with urllib.request.urlopen(req, timeout=20) as resp, open(cache_file, "wb") as f:
                         f.write(resp.read())
                 src_file = cache_file
+
+            if sys.platform == "win32":
+                # Windows user profile avatar
+                appdata = os.environ.get("APPDATA")
+                if appdata:
+                    acc_dir = Path(appdata) / "Microsoft" / "Windows" / "AccountPictures"
+                    acc_dir.mkdir(parents=True, exist_ok=True)
+                    target_win = acc_dir / item.filename
+                    shutil.copyfile(src_file, target_win)
+                pic_dir = self.get_default_avatar_dir()
+                pic_dir.mkdir(parents=True, exist_ok=True)
+                target_pic = pic_dir / item.filename
+                shutil.copyfile(src_file, target_pic)
+                return True, f"Profilovka '{item.title}' byla úspěšně uložena pro Windows účet a profil!"
 
             # 1. Linux Standard ~/.face and ~/.face.icon
             home_dir = Path.home()

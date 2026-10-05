@@ -4,7 +4,7 @@ import sys
 import shutil
 import urllib.request
 from pathlib import Path
-from PyQt6.QtCore import Qt, QUrl, QSize
+from PyQt6.QtCore import Qt, QUrl, QSize, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap, QMovie, QDesktopServices, QIcon
 from PyQt6.QtWidgets import (
     QDialog,
@@ -17,7 +17,43 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 from wallhaven.pfps import PfpItem, pfps_client
+from wallhaven.cache import cache
 from wallhaven.i18n import tr
+
+
+class PfpAssetWorker(QThread):
+    """Background worker to download full avatar/GIF without blocking the UI thread."""
+    finished = pyqtSignal(str, bool)  # local_path, is_animated
+    failed = pyqtSignal(str)
+
+    def __init__(self, item: PfpItem):
+        super().__init__()
+        self.item = item
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        try:
+            cache_dir = Path.home() / ".cache" / "komorebi" / "pfps"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            local_path = cache_dir / self.item.filename
+
+            if not (local_path.exists() and local_path.stat().st_size > 0):
+                req = urllib.request.Request(self.item.image_url, headers={"User-Agent": pfps_client.USER_AGENT})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                if self._cancelled:
+                    return
+                with open(local_path, "wb") as f:
+                    f.write(data)
+
+            if not self._cancelled:
+                self.finished.emit(str(local_path), self.item.is_animated)
+        except Exception as e:
+            if not self._cancelled:
+                self.failed.emit(str(e))
 
 
 class PfpDetailDialog(QDialog):
@@ -31,9 +67,10 @@ class PfpDetailDialog(QDialog):
         self._local_file: str | None = None
         self._pixmap: QPixmap | None = None
         self._movie: QMovie | None = None
+        self._worker: PfpAssetWorker | None = None
 
         self._init_ui()
-        self._load_full_asset()
+        self._start_asset_loading()
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -111,7 +148,14 @@ class PfpDetailDialog(QDialog):
         meta_row = QHBoxLayout()
         meta_row.setSpacing(12)
 
-        dl_lbl = QLabel(f"⬇ {self.item.downloads:,} {tr('pfp_downloads_suffix')}")
+        # Safe downloads count formatting (handles str, int, formatted numbers)
+        dl_raw = str(self.item.downloads).replace(",", "").strip()
+        try:
+            dl_val = int(dl_raw)
+            dl_str = f"{dl_val:,}"
+        except Exception:
+            dl_str = dl_raw or "0"
+        dl_lbl = QLabel(f"⬇ {dl_str} {tr('pfp_downloads_suffix')}")
         dl_lbl.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
         meta_row.addWidget(dl_lbl)
 
@@ -210,31 +254,43 @@ class PfpDetailDialog(QDialog):
 
         layout.addLayout(action_row)
 
-    def _load_full_asset(self):
-        """Downloads/caches the full avatar and displays animated GIF or PNG."""
+    def _start_asset_loading(self):
+        """Asynchronously loads the full asset, showing cached thumbnail immediately if available."""
         cache_dir = Path.home() / ".cache" / "komorebi" / "pfps"
-        cache_dir.mkdir(parents=True, exist_ok=True)
         local_path = cache_dir / self.item.filename
 
-        if not local_path.exists():
-            try:
-                req = urllib.request.Request(self.item.image_url, headers={"User-Agent": pfps_client.USER_AGENT})
-                with urllib.request.urlopen(req, timeout=15) as resp, open(local_path, "wb") as f:
-                    f.write(resp.read())
-            except Exception as e:
-                self.preview_label.setText(tr("pfp_avatar_download_failed", error=str(e)))
-                return
+        # If already cached on disk, display full asset immediately!
+        if local_path.exists() and local_path.stat().st_size > 0:
+            self._on_asset_loaded(str(local_path), self.item.is_animated)
+            return
 
-        self._local_file = str(local_path)
+        # Pre-populate preview with cached thumbnail for instant fluid responsiveness
+        thumb_pm = cache.get_scaled_pixmap(self.item.url, 192, 192) or cache.get_pixmap(self.item.url, is_thumb=True)
+        if thumb_pm and not thumb_pm.isNull():
+            scaled = thumb_pm.scaled(
+                340, 340,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.preview_label.setText("")
+            self.preview_label.setPixmap(scaled)
 
-        if self.item.is_animated:
-            self._movie = QMovie(str(local_path))
+        # Load full resolution asset in background thread
+        self._worker = PfpAssetWorker(self.item)
+        self._worker.finished.connect(self._on_asset_loaded)
+        self._worker.failed.connect(self._on_asset_failed)
+        self._worker.start()
+
+    def _on_asset_loaded(self, local_path: str, is_animated: bool):
+        self._local_file = local_path
+        if is_animated:
+            self._movie = QMovie(local_path)
             self._movie.setScaledSize(QSize(340, 340))
             self.preview_label.setText("")
             self.preview_label.setMovie(self._movie)
             self._movie.start()
         else:
-            pix = QPixmap(str(local_path))
+            pix = QPixmap(local_path)
             if not pix.isNull():
                 self._pixmap = pix
                 scaled = pix.scaled(
@@ -246,6 +302,10 @@ class PfpDetailDialog(QDialog):
                 self.preview_label.setText("")
                 self.preview_label.setPixmap(scaled)
 
+    def _on_asset_failed(self, error: str):
+        if not self._pixmap and not self._movie:
+            self.preview_label.setText(tr("pfp_avatar_download_failed", error=error))
+
     def _on_copy_clipboard(self):
         if self._pixmap and not self._pixmap.isNull():
             pfps_client.copy_image_to_clipboard(self._pixmap)
@@ -254,6 +314,11 @@ class PfpDetailDialog(QDialog):
             pix = QPixmap(self._local_file)
             pfps_client.copy_image_to_clipboard(pix)
             self.copy_btn.setText(tr("pfp_copied"))
+        else:
+            thumb_pm = cache.get_pixmap(self.item.url, is_thumb=True)
+            if thumb_pm and not thumb_pm.isNull():
+                pfps_client.copy_image_to_clipboard(thumb_pm)
+                self.copy_btn.setText(tr("pfp_copied"))
 
     def _on_set_system_avatar(self):
         ok, msg = pfps_client.set_system_avatar(self.item, self._local_file)
@@ -265,6 +330,23 @@ class PfpDetailDialog(QDialog):
             QMessageBox.warning(self, tr("pfp_avatar_error_title"), msg)
 
     def _on_download(self):
+        if self._local_file and os.path.exists(self._local_file):
+            try:
+                dest_dir = pfps_client.get_default_avatar_dir()
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest_path = dest_dir / self.item.filename
+                shutil.copyfile(self._local_file, dest_path)
+                self.download_btn.setText(tr("pfp_downloaded"))
+                self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
+                QMessageBox.information(
+                    self,
+                    tr("pfp_avatar_saved_title"),
+                    tr("pfp_avatar_saved_msg", path=str(dest_path)),
+                )
+                return
+            except Exception:
+                pass
+
         ok, path_or_err = pfps_client.download_pfp(self.item)
         if ok:
             self.download_btn.setText(tr("pfp_downloaded"))
@@ -282,6 +364,10 @@ class PfpDetailDialog(QDialog):
             QDesktopServices.openUrl(QUrl(self.item.page_url))
 
     def closeEvent(self, event):
+        if self._worker and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.wait(1000)
+            self._worker = None
         if self._movie:
             self._movie.stop()
             self._movie = None
