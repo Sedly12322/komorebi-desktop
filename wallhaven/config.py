@@ -62,7 +62,7 @@ DEFAULT_CONFIG = {
     "color": "",          # Hex code without #
     "per_page": 24,
     "theme": get_default_theme(),
-    "auto_set_wallpaper": True,
+    "auto_set_wallpaper": False,
     "wallpaper_setter": "auto",
     "custom_wallpaper_cmd": "",
     "custom_video_wallpaper_cmd": "",
@@ -130,7 +130,7 @@ class Config:
 
     @property
     def auto_set_wallpaper(self) -> bool:
-        return bool(self._config.get("auto_set_wallpaper", True))
+        return bool(self._config.get("auto_set_wallpaper", False))
 
     @auto_set_wallpaper.setter
     def auto_set_wallpaper(self, val: bool):
