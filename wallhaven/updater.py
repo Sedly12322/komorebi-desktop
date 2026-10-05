@@ -16,6 +16,7 @@ import re
 import json
 import time
 import shutil
+import hashlib
 import tarfile
 import tempfile
 import threading
@@ -133,6 +134,7 @@ class UpdateInfo:
     windows_installer_url: str | None = None
     windows_installer_name: str | None = None
     windows_portable_url: str | None = None
+    checksums: dict[str, str] = field(default_factory=dict)
     is_git_clone: bool = False
     git_branch: str = ""
     git_commits_ahead: int = 0
@@ -229,17 +231,60 @@ def check_for_updates_sync(current_ver: str = __version__) -> UpdateInfo:
     info.tarball_url = release_data.get("tarball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.tar.gz"
     info.zipball_url = release_data.get("zipball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
 
-    # Assets inspection
+    # Assets inspection & SHA256 discovery
+    checksum_assets: list[tuple[str, str]] = []
     for asset in release_data.get("assets", []):
         name = asset.get("name", "")
         dl_url = asset.get("browser_download_url", "")
-        if name.lower().endswith(".exe"):
+        name_lower = name.lower()
+        if name_lower.endswith(".exe"):
             info.windows_installer_url = dl_url
             info.windows_installer_name = name
-        elif name.lower().endswith(".zip") and "portable" in name.lower():
+        elif name_lower.endswith(".zip") and "portable" in name_lower:
             info.windows_portable_url = dl_url
+        elif name_lower.endswith(".sha256") or name_lower in ("sha256sums.txt", "checksums.txt", "sha256sum.txt"):
+            checksum_assets.append((name, dl_url))
+
+    # 1. Parse checksums from release notes (body)
+    if info.release_notes:
+        for line in info.release_notes.splitlines():
+            line = line.strip()
+            m = re.search(r"\b([a-fA-F0-9]{64})\b\s+\*?([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)", line)
+            if m:
+                h, fn = m.groups()
+                info.checksums[fn.strip().lower()] = h.strip().lower()
+            else:
+                m2 = re.search(r"([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)\s*[:=]\s*\b([a-fA-F0-9]{64})\b", line)
+                if m2:
+                    fn, h = m2.groups()
+                    info.checksums[fn.strip().lower()] = h.strip().lower()
+
+    # 2. Parse dedicated checksum asset files if present
+    for c_name, c_url in checksum_assets:
+        try:
+            req_c = urllib.request.Request(c_url, headers={"User-Agent": f"Komorebi-Desktop-Updater/{current_ver}"})
+            with urllib.request.urlopen(req_c, timeout=5) as c_resp:
+                c_content = c_resp.read(65536).decode("utf-8", errors="ignore")
+                if c_name.lower().endswith(".sha256") and not c_name.lower().startswith("sha256sums"):
+                    target_file = c_name[:-7]
+                    h_match = re.search(r"\b([a-fA-F0-9]{64})\b", c_content)
+                    if h_match:
+                        info.checksums[target_file.lower()] = h_match.group(1).lower()
+                else:
+                    for line in c_content.splitlines():
+                        parts = line.strip().split()
+                        if len(parts) >= 2 and len(parts[0]) == 64:
+                            h = parts[0]
+                            fn = parts[1].lstrip("*")
+                            info.checksums[fn.lower()] = h.lower()
+        except Exception:
+            pass
 
     info.has_update = is_newer_version(tag, current_ver)
+    try:
+        config.last_update_check = time.time()
+    except Exception:
+        pass
     return info
 
 
@@ -367,6 +412,29 @@ class UpdateApplyWorker(QThread):
         elif p.is_dir():
             shutil.rmtree(p)
 
+    def _verify_sha256(self, target_path: Path, filename: str):
+        """Verifies downloaded file against SHA-256 checksum if available in release metadata."""
+        if not target_path.exists():
+            return
+        expected_hash = self.info.checksums.get(filename.lower())
+        if not expected_hash:
+            return  # No checksum was published for this asset
+
+        self.progress.emit(90, tr("updater_prog_verifying_hash"))
+        h = hashlib.sha256()
+        with open(target_path, "rb") as f:
+            while chunk := f.read(65536):
+                h.update(chunk)
+        actual_hash = h.hexdigest().lower()
+        if actual_hash != expected_hash.lower():
+            try:
+                target_path.unlink()
+            except Exception:
+                pass
+            raise RuntimeError(
+                tr("updater_err_sha256_mismatch", name=filename, expected=expected_hash, actual=actual_hash)
+            )
+
     # ------------------------------------------------------------------ Windows
     def _update_windows(self):
         """Downloads the Windows installer; it is launched after the user confirms restart."""
@@ -383,6 +451,9 @@ class UpdateApplyWorker(QThread):
 
         self.progress.emit(5, tr("updater_prog_download_installer", name=out_name))
         self._download(installer_url, target_path, 5, 85)
+
+        # Verify integrity
+        self._verify_sha256(target_path, out_name)
 
         self.progress.emit(100, tr("updater_prog_installer_ready"))
         self.apply_finished.emit(True, str(target_path))
@@ -447,6 +518,10 @@ class UpdateApplyWorker(QThread):
 
             self.progress.emit(10, tr("updater_prog_download_archive", tag=tag))
             self._download(archive_url, tmp_tar, 10, 45)
+
+            # Verify integrity if checksum published
+            self._verify_sha256(tmp_tar, f"{tag}.tar.gz")
+            self._verify_sha256(tmp_tar, "update.tar.gz")
 
             self.progress.emit(58, tr("updater_prog_extract"))
             with tarfile.open(tmp_tar, "r:gz") as tar:

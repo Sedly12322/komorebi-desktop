@@ -1,1 +1,1 @@
-"""Widgets package for Wallhaven Desktop."""
+"""Widgets package for Komorebi Desktop."""

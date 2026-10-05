@@ -1,4 +1,4 @@
-"""Ultra-Modern Multi-Theme Engine for Wallhaven Desktop.
+"""Ultra-Modern Multi-Theme Engine for Komorebi Desktop.
 
 Supports curated Linux & cross-platform themes:
 - Wallhaven Dark (Default Obsidian & Indigo)
@@ -996,7 +996,8 @@ QComboBox {
     border: 1.5px solid %(border)s;
     border-radius: 9px;
     padding: 4px 8px;
-    padding-right: 20px;
+    padding-right: 24px;
+    min-width: 85px;
     font-size: 11.5px;
     font-weight: 500;
 }

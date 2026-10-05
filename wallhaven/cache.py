@@ -8,9 +8,20 @@ from PyQt6.QtGui import QPixmap
 
 if sys.platform == "win32":
     localapp = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-    CACHE_DIR = Path(localapp) / "wallhaven-desktop"
+    CACHE_DIR = Path(localapp) / "komorebi-desktop"
+    OLD_CACHE_DIR = Path(localapp) / "wallhaven-desktop"
 else:
-    CACHE_DIR = Path.home() / ".cache" / "wallhaven-desktop"
+    CACHE_DIR = Path.home() / ".cache" / "komorebi-desktop"
+    OLD_CACHE_DIR = Path.home() / ".cache" / "wallhaven-desktop"
+
+# Transparent migration from legacy cache directory if new one doesn't exist yet
+if not CACHE_DIR.exists() and OLD_CACHE_DIR.exists():
+    try:
+        import shutil
+        shutil.move(str(OLD_CACHE_DIR), str(CACHE_DIR))
+    except Exception:
+        pass
+
 THUMB_CACHE_DIR = CACHE_DIR / "thumbnails"
 FULL_CACHE_DIR = CACHE_DIR / "previews"
 

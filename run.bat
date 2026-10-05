@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-title Wallhaven Desktop
+title Komorebi Desktop
 cd /d "%~dp0"
 
-echo [Wallhaven Desktop] Kontrola Python prostredi...
+echo [Komorebi Desktop] Kontrola Python prostredi...
 
 :: 1. Check if Python is available
 where python >nul 2>nul
@@ -29,7 +29,7 @@ if %errorlevel% neq 0 (
 :: 2. Check virtual environment & PyQt6 installation
 set "NEED_INSTALL=0"
 if not exist ".venv\Scripts\python.exe" (
-    echo [Wallhaven Desktop] Vytvarim virtualni prostredi .venv...
+    echo [Komorebi Desktop] Vytvarim virtualni prostredi .venv...
     %PY_CMD% -m venv .venv
     if %errorlevel% neq 0 (
         echo [CHYBA] Nepodarilo se vytvorit virtualni prostredi .venv.
@@ -45,7 +45,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 if "%NEED_INSTALL%"=="1" (
-    echo [Wallhaven Desktop] Instaluji potrebne knihovny (PyQt6, requests, Pillow)...
+    echo [Komorebi Desktop] Instaluji potrebne knihovny (PyQt6, requests, Pillow)...
     call .venv\Scripts\activate.bat
     python -m pip install --upgrade pip
     pip install -r requirements.txt
@@ -58,7 +58,7 @@ if "%NEED_INSTALL%"=="1" (
 )
 
 :: 3. Launch the application
-echo [Wallhaven Desktop] Spoustim aplikaci...
+echo [Komorebi Desktop] Spoustim aplikaci...
 if exist ".venv\Scripts\pythonw.exe" (
     start "" ".venv\Scripts\pythonw.exe" main.py %*
 ) else (

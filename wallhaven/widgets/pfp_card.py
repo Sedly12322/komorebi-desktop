@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QGraphicsDropShadowEffect,
 )
-from wallhaven.pfps import PfpItem, pfps_client
+from wallhaven.pfps import PfpItem, pfps_client, format_download_count
 from wallhaven.cache import cache
 from wallhaven.image_loader import loader
 from wallhaven.i18n import tr
@@ -203,20 +203,7 @@ class PfpCard(QFrame):
                 pass
 
     def _format_downloads(self, count) -> str:
-        if isinstance(count, str):
-            if count.isdigit():
-                count = int(count)
-            else:
-                return count
-        try:
-            val = int(count)
-            if val >= 1_000_000:
-                return f"{val / 1_000_000:.1f}M"
-            if val >= 1_000:
-                return f"{val / 1_000:.1f}k"
-            return str(val)
-        except Exception:
-            return str(count)
+        return format_download_count(count)
 
     def enterEvent(self, event):
         super().enterEvent(event)

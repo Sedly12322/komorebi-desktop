@@ -45,6 +45,27 @@ class PfpItem:
         return f"{safe_title}_{self.id}{ext}"
 
 
+def format_download_count(count: int | str) -> str:
+    """Format download numbers for display (e.g. 1200 -> '1.2k', 1500000 -> '1.5M')."""
+    if count is None:
+        return "0"
+    if isinstance(count, str):
+        cleaned = count.replace(",", "").strip()
+        if cleaned.isdigit():
+            count = int(cleaned)
+        else:
+            return count
+    try:
+        val = int(count)
+        if val >= 1_000_000:
+            return f"{val / 1_000_000:.1f}M"
+        if val >= 1_000:
+            return f"{val / 1_000:.1f}k"
+        return str(val)
+    except Exception:
+        return str(count)
+
+
 PFP_CATEGORIES = [
     ("all", "✨ Vše / Nejnovější", "All / Latest"),
     ("anime", "🌸 Anime", "Anime"),

@@ -5,9 +5,20 @@ from pathlib import Path
 
 if sys.platform == "win32":
     appdata = os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-    CONFIG_DIR = Path(appdata) / "wallhaven-desktop"
+    CONFIG_DIR = Path(appdata) / "komorebi-desktop"
+    OLD_CONFIG_DIR = Path(appdata) / "wallhaven-desktop"
 else:
-    CONFIG_DIR = Path.home() / ".config" / "wallhaven-desktop"
+    CONFIG_DIR = Path.home() / ".config" / "komorebi-desktop"
+    OLD_CONFIG_DIR = Path.home() / ".config" / "wallhaven-desktop"
+
+# Transparent migration from legacy wallhaven-desktop config directory
+if not CONFIG_DIR.exists() and OLD_CONFIG_DIR.exists():
+    try:
+        import shutil
+        shutil.copytree(OLD_CONFIG_DIR, CONFIG_DIR)
+    except Exception:
+        pass
+
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 

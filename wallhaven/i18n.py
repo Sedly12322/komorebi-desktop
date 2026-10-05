@@ -443,6 +443,8 @@ TRANSLATIONS = {
         "updater_success_archive": "Komorebi Desktop was successfully updated.",
         "updater_default_notes": "Release {release}.\nContains the latest bugfixes, optimizations and enhancements for Komorebi Desktop.",
         "updater_btn_run_installer": "🚀 Launch Installer & Restart",
+        "updater_prog_verifying_hash": "Verifying SHA-256 integrity checksum...",
+        "updater_err_sha256_mismatch": "SHA-256 integrity verification failed for {name}!\nExpected: {expected}\nActual: {actual}\nThe download may be corrupted. Update aborted for safety.",
         "updater_err_frozen_linux": "Packaged Linux build cannot be updated from inside the app. Please download the new release from: {url}",
     },
     "cs": {
@@ -884,6 +886,8 @@ TRANSLATIONS = {
         "updater_success_archive": "Komorebi Desktop byl úspěšně aktualizován.",
         "updater_default_notes": "Vydání {release}.\nObsahuje nejnovější opravy chyb, optimalizace a nová vylepšení pro Komorebi Desktop.",
         "updater_btn_run_installer": "🚀 Spustit instalátor a restartovat",
+        "updater_prog_verifying_hash": "Ověřuji kontrolní součet integrity SHA-256...",
+        "updater_err_sha256_mismatch": "Kontrola integrity SHA-256 pro {name} selhala!\nOčekáváno: {expected}\nSkutečnost: {actual}\nStažený soubor je pravděpodobně poškozen. Aktualizace byla zrušena.",
         "updater_err_frozen_linux": "Zabalenou verzi pro Linux nelze aktualizovat z aplikace. Stáhněte novou verzi z: {url}",
     }
 }

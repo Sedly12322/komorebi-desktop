@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl, QPoint, QTimer
 from PyQt6.QtGui import QIcon, QDesktopServices, QKeySequence, QShortcut
@@ -131,6 +132,44 @@ class PfpsSearchWorker(QThread):
             self.finished.emit(self.search_id, items, has_next, page)
         except Exception as e:
             self.failed.emit(self.search_id, str(e))
+
+
+class StatusToastProxy:
+    """Seamlessly redirects status updates into KomorebiToast notifications instead of a legacy gray status bar."""
+
+    def __init__(self, main_win):
+        self.main_win = main_win
+
+    def showMessage(self, text: str, timeout: int = 0):
+        if not text:
+            return
+        text_clean = text.strip()
+        # Suppress startup "Ready" or repetitive low-level byte progress
+        if text_clean in ("Ready", "Připraveno", "Ready.", "Připraveno."):
+            return
+        if "Downloading" in text_clean or "Stahování" in text_clean or "MB /" in text_clean:
+            return
+        if "Searching wallpapers" in text_clean or "Vyhledávání tapet" in text_clean:
+            return
+
+        icon = "🌿"
+        if "✓" in text_clean or "Success" in text_clean or "Úspěch" in text_clean:
+            icon = "✓"
+        elif "error" in text_clean.lower() or "fail" in text_clean.lower() or "chyba" in text_clean.lower() or "✗" in text_clean:
+            icon = "⚠️"
+        elif "tapet" in text_clean.lower() or "wallpaper" in text_clean.lower():
+            icon = "🖼️"
+        elif "avatar" in text_clean.lower() or "profilov" in text_clean.lower():
+            icon = "👤"
+        elif "kopírov" in text_clean.lower() or "copied" in text_clean.lower():
+            icon = "📋"
+
+        duration = timeout if timeout > 0 else 3500
+        if hasattr(self.main_win, "toast") and self.main_win.toast:
+            self.main_win.toast.show_message(text_clean, icon=icon, duration_ms=duration)
+
+    def clearMessage(self):
+        pass
 
 
 class MainWindow(QMainWindow):
@@ -338,21 +377,29 @@ class MainWindow(QMainWindow):
         # Sorting & Filters
         self.sort_lbl = QLabel()
         self.sort_combo = QComboBox()
+        self.sort_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.sort_combo.setMinimumWidth(100)
         self.sort_combo.currentIndexChanged.connect(self._on_sorting_changed)
         f_layout.addWidget(self.sort_combo)
 
         # Top Range combo
         self.range_combo = QComboBox()
+        self.range_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.range_combo.setMinimumWidth(85)
         self.range_combo.currentIndexChanged.connect(self._on_filter_changed)
         f_layout.addWidget(self.range_combo)
 
         # Aspect Ratio combo
         self.ratio_combo = QComboBox()
+        self.ratio_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.ratio_combo.setMinimumWidth(105)
         self.ratio_combo.currentIndexChanged.connect(self._on_filter_changed)
         f_layout.addWidget(self.ratio_combo)
 
         # Min Resolution combo
         self.res_combo = QComboBox()
+        self.res_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.res_combo.setMinimumWidth(110)
         self.res_combo.currentIndexChanged.connect(self._on_filter_changed)
         f_layout.addWidget(self.res_combo)
 
@@ -627,15 +674,14 @@ class MainWindow(QMainWindow):
         self.canvas_wrapper = CanvasWrapper(self.scroll_area, self.pagination)
         self.canvas_vlayout.addWidget(self.canvas_wrapper, stretch=1)
 
-        # Status Bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-
         # Modern floating toast notification banner
         self.toast = KomorebiToast(self)
 
+        # Status notifications via modern glassmorphic toasts instead of legacy gray status bar
+        self.setStatusBar(None)
+        self.status_bar = StatusToastProxy(self)
+
         self.retranslate_ui()
-        self.status_bar.showMessage(tr("status_ready"))
 
     def _retranslate_combos(self):
         def _populate(combo: QComboBox, items: list[tuple[str, str]]):
@@ -648,6 +694,8 @@ class MainWindow(QMainWindow):
                 idx = combo.findData(cur)
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            combo.adjustSize()
             combo.blockSignals(False)
 
         _populate(self.sort_combo, [
@@ -1007,7 +1055,12 @@ class MainWindow(QMainWindow):
             self.perform_search(page=self.current_page)
 
     def _check_updates_quietly(self):
-        """Asynchronously checks GitHub for updates after app startup."""
+        """Asynchronously checks GitHub for updates after app startup (throttled to once every 4h)."""
+        if not config.get("auto_check_updates", True):
+            return
+        last_check = config.last_update_check
+        if time.time() - last_check < 4 * 3600:
+            return
         self.update_check_worker = UpdateCheckWorker(current_ver=__version__, parent=self)
         self.update_check_worker.check_finished.connect(self._on_quiet_update_check_finished)
         self.update_check_worker.start()
