@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from wallhaven.config import config
-from wallhaven.cache import CACHE_DIR
+from wallhaven.cache import CACHE_DIR, cache
 from wallhaven.styles import get_available_themes, get_stylesheet, is_matugen_available
 from PyQt6.QtWidgets import QApplication
 from wallhaven.wallpaper import (
@@ -543,14 +543,7 @@ class SettingsDialog(QDialog):
 
     def _on_clear_cache(self):
         try:
-            if CACHE_DIR.exists():
-                for item in CACHE_DIR.iterdir():
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
-            (CACHE_DIR / "thumbnails").mkdir(parents=True, exist_ok=True)
-            (CACHE_DIR / "previews").mkdir(parents=True, exist_ok=True)
+            cache.clear()
             self.cache_size_lbl.setText(self._get_cache_size_str())
             QMessageBox.information(self, tr("cache_cleared_title"), tr("cache_cleared_msg"))
         except Exception as e:

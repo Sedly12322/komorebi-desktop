@@ -544,7 +544,7 @@ class UpdateApplyWorker(QThread):
 
             init_file = src_root / "wallhaven" / "__init__.py"
             if not init_file.is_file() or not (src_root / "main.py").is_file():
-                raise RuntimeError("Archiv neobsahuje platnou aplikaci Komorebi Desktop.")
+                raise RuntimeError(tr("updater_err_invalid_archive"))
             m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_file.read_text(encoding="utf-8"))
             archive_ver = m.group(1) if m else ""
             if not is_newer_version(archive_ver, self.info.current_version):
@@ -569,7 +569,7 @@ class UpdateApplyWorker(QThread):
             self.progress.emit(80, tr("updater_prog_replace_files"))
             self._swap_in(src_root, target_dir)
 
-        self.progress.emit(92, "Aktualizuji ikony...")
+        self.progress.emit(92, tr("updater_prog_icons"))
         try:
             icon_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/256x256/apps"
             src_icon = target_dir / "assets" / "icon.png"
@@ -647,10 +647,13 @@ def restart_application():
 class UpdateDialog(QDialog):
     """Modern glassmorphic modal dialog to view release notes and perform updates."""
 
+    _lingering_workers: set = set()
+
     def __init__(self, update_info: UpdateInfo, parent=None):
         super().__init__(parent)
         self.info = update_info
         self.apply_worker: UpdateApplyWorker | None = None
+        self.check_worker: UpdateCheckWorker | None = None
         self._downloaded_installer_path: str | None = None
 
         self.setWindowTitle(tr("update_title"))
@@ -659,6 +662,8 @@ class UpdateDialog(QDialog):
         self.setModal(True)
 
         self._init_ui()
+        if not self.info.latest_version:
+            self._start_live_check()
 
     def _init_ui(self):
         pal = get_palette(config.theme)
@@ -700,8 +705,8 @@ class UpdateDialog(QDialog):
         title_box.addWidget(title_lbl)
 
         # Version progression row: v1.4.2 -> v2.0.0
-        ver_row = QHBoxLayout()
-        ver_row.setSpacing(8)
+        self.ver_row = QHBoxLayout()
+        self.ver_row.setSpacing(8)
 
         cur_v = self.info.current_version
         new_v = self.info.latest_version or cur_v
@@ -715,34 +720,35 @@ class UpdateDialog(QDialog):
             padding: 2px 8px;
             border-radius: 6px;
         """)
-        ver_row.addWidget(cur_badge)
+        self.ver_row.addWidget(cur_badge)
+
+        self.arrow_lbl = QLabel("➔")
+        self.arrow_lbl.setStyleSheet("color: #6366f1; font-weight: 900; font-size: 12px;")
+        self.arrow_lbl.setVisible(self.info.has_update)
+        self.ver_row.addWidget(self.arrow_lbl)
+
+        self.new_badge = QLabel(f"{new_v}")
+        self.new_badge.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 10px;
+            border-radius: 6px;
+        """)
+        self.new_badge.setVisible(self.info.has_update)
+        self.ver_row.addWidget(self.new_badge)
 
         if self.info.has_update:
-            arrow_lbl = QLabel("➔")
-            arrow_lbl.setStyleSheet("color: #6366f1; font-weight: 900; font-size: 12px;")
-            ver_row.addWidget(arrow_lbl)
-
-            new_badge = QLabel(f"{new_v}")
-            new_badge.setStyleSheet("""
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
-                color: #ffffff;
-                font-size: 11px;
-                font-weight: 800;
-                padding: 2px 10px;
-                border-radius: 6px;
-            """)
-            ver_row.addWidget(new_badge)
-
-            status_text = QLabel(tr("update_available_status", version=new_v))
-            status_text.setStyleSheet("color: #34d399; font-size: 11.5px; font-weight: 700;")
-            ver_row.addWidget(status_text)
+            self.header_status_lbl = QLabel(tr("update_available_status", version=new_v))
+            self.header_status_lbl.setStyleSheet("color: #34d399; font-size: 11.5px; font-weight: 700;")
         else:
-            status_text = QLabel(tr("update_latest_status", version=cur_v))
-            status_text.setStyleSheet("color: #38bdf8; font-size: 11.5px; font-weight: 700;")
-            ver_row.addWidget(status_text)
+            self.header_status_lbl = QLabel(tr("update_latest_status", version=cur_v))
+            self.header_status_lbl.setStyleSheet("color: #38bdf8; font-size: 11.5px; font-weight: 700;")
+        self.ver_row.addWidget(self.header_status_lbl)
 
-        ver_row.addStretch()
-        title_box.addLayout(ver_row)
+        self.ver_row.addStretch()
+        title_box.addLayout(self.ver_row)
         header.addLayout(title_box, 1)
         layout.addLayout(header)
 
@@ -753,9 +759,9 @@ class UpdateDialog(QDialog):
         layout.addWidget(div)
 
         # 2. Release Notes / Changelog section
-        notes_title = QLabel(tr("update_changelog_title", version=new_v))
-        notes_title.setStyleSheet("font-size: 12.5px; font-weight: 700; color: #cbd5e1;")
-        layout.addWidget(notes_title)
+        self.notes_title = QLabel(tr("update_changelog_title", version=new_v))
+        self.notes_title.setStyleSheet("font-size: 12.5px; font-weight: 700; color: #cbd5e1;")
+        layout.addWidget(self.notes_title)
 
         self.notes_box = QTextEdit()
         self.notes_box.setReadOnly(True)
@@ -774,7 +780,7 @@ class UpdateDialog(QDialog):
         """)
 
         # Clean markdown / release notes presentation
-        notes_text = self.info.release_notes.strip() if self.info.release_notes else tr("updater_default_notes", release=self.info.release_name)
+        notes_text = self.info.release_notes.strip() if self.info.release_notes else tr("updater_default_notes", release=self.info.release_name or f"v{new_v}")
         self.notes_box.setMarkdown(notes_text)
         layout.addWidget(self.notes_box, 1)
 
@@ -869,6 +875,42 @@ class UpdateDialog(QDialog):
 
         layout.addLayout(btn_row)
 
+    def _start_live_check(self):
+        """Triggers a live GitHub release check if the dialog was opened before startup check finished."""
+        self.header_status_lbl.setText(tr("update_checking_status"))
+        self.header_status_lbl.setStyleSheet("color: #a5b4fc; font-size: 11.5px; font-weight: 700;")
+        self.notes_box.setMarkdown(tr("update_checking_status"))
+        self.check_worker = UpdateCheckWorker()
+        w = self.check_worker
+        self._lingering_workers.add(w)
+        w.finished.connect(lambda: self._lingering_workers.discard(w))
+        w.check_finished.connect(self._on_live_check_finished)
+        w.start()
+
+    def _on_live_check_finished(self, info: UpdateInfo):
+        self.info = info
+        cur_v = info.current_version
+        new_v = info.latest_version or cur_v
+        self.new_badge.setText(f"{new_v}")
+        self.arrow_lbl.setVisible(info.has_update)
+        self.new_badge.setVisible(info.has_update)
+        if info.has_update:
+            self.header_status_lbl.setText(tr("update_available_status", version=new_v))
+            self.header_status_lbl.setStyleSheet("color: #34d399; font-size: 11.5px; font-weight: 700;")
+        else:
+            self.header_status_lbl.setText(tr("update_latest_status", version=cur_v))
+            self.header_status_lbl.setStyleSheet("color: #38bdf8; font-size: 11.5px; font-weight: 700;")
+        self.notes_title.setText(tr("update_changelog_title", version=new_v))
+        notes_text = info.release_notes.strip() if info.release_notes else tr("updater_default_notes", release=info.release_name or f"v{new_v}")
+        self.notes_box.setMarkdown(notes_text)
+        self.apply_btn.setVisible(info.has_update)
+        self.close_btn.setText(tr("update_btn_later") if info.has_update else tr("update_btn_close"))
+        if self.parent() and hasattr(self.parent(), "_on_update_check_finished"):
+            try:
+                self.parent()._on_update_check_finished(info)
+            except Exception:
+                pass
+
     def _is_installing(self) -> bool:
         return self.apply_worker is not None and self.apply_worker.isRunning()
 
@@ -876,6 +918,11 @@ class UpdateDialog(QDialog):
         # Esc / window close must not abandon a running install.
         if self._is_installing():
             return
+        if self.check_worker and self.check_worker.isRunning():
+            try:
+                self.check_worker.check_finished.disconnect(self._on_live_check_finished)
+            except Exception:
+                pass
         super().reject()
 
     def _open_github(self):

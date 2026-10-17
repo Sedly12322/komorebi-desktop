@@ -449,6 +449,14 @@ TRANSLATIONS = {
         "updater_prog_verifying_hash": "Verifying SHA-256 integrity checksum...",
         "updater_err_sha256_mismatch": "SHA-256 integrity verification failed for {name}!\nExpected: {expected}\nActual: {actual}\nThe download may be corrupted. Update aborted for safety.",
         "updater_err_frozen_linux": "Packaged Linux build cannot be updated from inside the app. Please download the new release from: {url}",
+        "updater_err_invalid_archive": "Archive does not contain a valid Komorebi Desktop application.",
+        "updater_prog_icons": "Updating application icons...",
+        "update_checking_status": "Checking for updates on GitHub...",
+        "meta_source": "Source / Provider",
+        "moe_badge": "🎬 20,000+ Video Wallpapers (MP4)",
+        "awww_not_installed": "awww is not installed.",
+        "hypr_script_not_found": "Hyprland script ~/.config/hypr/scripts/set-wallpaper.sh was not found.",
+        "toast_downloading_wallpaper": "Downloading wallpaper {name} before setting...",
     },
     "cs": {
         # App & Header
@@ -895,6 +903,14 @@ TRANSLATIONS = {
         "updater_prog_verifying_hash": "Ověřuji kontrolní součet integrity SHA-256...",
         "updater_err_sha256_mismatch": "Kontrola integrity SHA-256 pro {name} selhala!\nOčekáváno: {expected}\nSkutečnost: {actual}\nStažený soubor je pravděpodobně poškozen. Aktualizace byla zrušena.",
         "updater_err_frozen_linux": "Zabalenou verzi pro Linux nelze aktualizovat z aplikace. Stáhněte novou verzi z: {url}",
+        "updater_err_invalid_archive": "Archiv neobsahuje platnou aplikaci Komorebi Desktop.",
+        "updater_prog_icons": "Aktualizuji ikony...",
+        "update_checking_status": "Kontroluji dostupnost aktualizací na GitHubu...",
+        "meta_source": "Zdroj / Provider",
+        "moe_badge": "🎬 20 000+ Video tapet (MP4)",
+        "awww_not_installed": "awww není nainstalováno.",
+        "hypr_script_not_found": "Hyprland skript ~/.config/hypr/scripts/set-wallpaper.sh nebyl nalezen.",
+        "toast_downloading_wallpaper": "Stahuji tapetu {name} před nastavením...",
     }
 }
 

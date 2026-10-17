@@ -24,6 +24,17 @@ if not CACHE_DIR.exists() and OLD_CACHE_DIR.exists():
 
 THUMB_CACHE_DIR = CACHE_DIR / "thumbnails"
 FULL_CACHE_DIR = CACHE_DIR / "previews"
+PFPS_CACHE_DIR = CACHE_DIR / "pfps"
+
+# Migrate legacy ~/.cache/komorebi/pfps directory if present
+_LEGACY_PFPS_DIR = Path.home() / ".cache" / "komorebi" / "pfps"
+if not PFPS_CACHE_DIR.exists() and _LEGACY_PFPS_DIR.exists():
+    try:
+        import shutil
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(_LEGACY_PFPS_DIR), str(PFPS_CACHE_DIR))
+    except Exception:
+        pass
 
 MAX_CACHE_BYTES = 750 * 1024 * 1024  # 750 MB disk cache
 
@@ -32,6 +43,7 @@ class ImageCache:
     def __init__(self):
         THUMB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         FULL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        PFPS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         # High-performance LRU memory caches
         self._pixmap_mem_cache: OrderedDict[str, QPixmap] = OrderedDict()
         self._scaled_mem_cache: OrderedDict[str, QPixmap] = OrderedDict()
@@ -97,6 +109,24 @@ class ImageCache:
         except Exception as e:
             print(f"Error saving cached image {url}: {e}")
         return path
+
+    def clear(self):
+        """Clears both in-memory LRU pixmap caches and on-disk cache directories."""
+        import shutil
+        self._pixmap_mem_cache.clear()
+        self._scaled_mem_cache.clear()
+        if CACHE_DIR.exists():
+            for item in CACHE_DIR.iterdir():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+                except Exception:
+                    pass
+        THUMB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        FULL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        PFPS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def clean_old_cache_if_needed(self):
         try:

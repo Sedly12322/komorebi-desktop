@@ -6,6 +6,7 @@ for Discord profile pictures, anime PFPs, aesthetic icons, and animated GIFs fro
 import os
 import sys
 import re
+import html as html_lib
 import json
 import shutil
 import urllib.request
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPixmap, QImage
+from wallhaven.cache import PFPS_CACHE_DIR
 from wallhaven.i18n import tr
 
 
@@ -96,7 +98,7 @@ class PfpsClient:
     USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
 
     def __init__(self):
-        self._cache_dir = Path.home() / ".cache" / "komorebi" / "pfps"
+        self._cache_dir = PFPS_CACHE_DIR
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
     def get_categories(self) -> List[Tuple[str, str, str]]:
@@ -149,7 +151,7 @@ class PfpsClient:
 
             # Extract Title
             title_m = re.search(r'<span class=\"line-clamp-1[^\"]*\">(.*?)</span>', card)
-            title = title_m.group(1).strip() if title_m else "Avatar"
+            title = html_lib.unescape(title_m.group(1).strip()) if title_m else "Avatar"
 
             # Extract ID / Slug
             id_m = re.search(r'href=\"/pfp/([^\"]+)\"', card)

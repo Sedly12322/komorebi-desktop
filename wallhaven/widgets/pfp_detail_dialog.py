@@ -36,7 +36,7 @@ class PfpAssetWorker(QThread):
 
     def run(self):
         try:
-            cache_dir = Path.home() / ".cache" / "komorebi" / "pfps"
+            cache_dir = pfps_client._cache_dir
             cache_dir.mkdir(parents=True, exist_ok=True)
             local_path = cache_dir / self.item.filename
 
@@ -256,7 +256,7 @@ class PfpDetailDialog(QDialog):
 
     def _start_asset_loading(self):
         """Asynchronously loads the full asset, showing cached thumbnail immediately if available."""
-        cache_dir = Path.home() / ".cache" / "komorebi" / "pfps"
+        cache_dir = pfps_client._cache_dir
         local_path = cache_dir / self.item.filename
 
         # If already cached on disk, display full asset immediately!

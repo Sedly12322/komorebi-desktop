@@ -85,8 +85,8 @@ class Config:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self._config.update(data)
-                # Auto-upgrade 'system' theme to 'matugen' if Serpantinum / Matugen is active
-                if self._config.get("theme") in ("system", "dark") and sys.platform != "win32":
+                # Auto-upgrade legacy 'system' theme to 'matugen' if Serpantinum / Matugen is active
+                if self._config.get("theme") == "system" and sys.platform != "win32":
                     if (Path.home() / ".local/state/serpantinum" / "qs_colors.json").exists():
                         self._config["theme"] = "matugen"
             except Exception as e:

@@ -43,9 +43,29 @@ from wallhaven.widgets.ambient_background import KomorebiAmbientCanvas
 from wallhaven.widgets.toast import KomorebiToast
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.pfps import pfps_client, PfpItem
+from wallhaven.cache import cache
 from wallhaven.styles import get_available_themes, apply_theme, get_palette, get_asset_path
 from wallhaven import __version__
 from wallhaven.updater import UpdateCheckWorker, UpdateDialog, UpdateBanner, UpdateInfo
+
+
+class PfpActionWorker(QThread):
+    finished = pyqtSignal(bool, str, PfpItem, str)  # ok, msg_or_path, item, action ("download" | "avatar")
+
+    def __init__(self, item: PfpItem, action: str):
+        super().__init__()
+        self.item = item
+        self.action = action
+
+    def run(self):
+        try:
+            if self.action == "download":
+                ok, res = pfps_client.download_pfp(self.item)
+            else:
+                ok, res = pfps_client.set_system_avatar(self.item)
+            self.finished.emit(ok, res, self.item, self.action)
+        except Exception as e:
+            self.finished.emit(False, str(e), self.item, self.action)
 
 
 class SearchWorker(QThread):
@@ -194,10 +214,11 @@ class MainWindow(QMainWindow):
         self.last_page = 1
         self.total_count = 0
         self.current_color = ""
-        self.active_search_worker: SearchWorker | OsuSearchWorker | None = None
+        self.active_search_worker: QThread | None = None
         self.quick_download_worker: DownloadWorker | None = None
         self.update_check_worker: UpdateCheckWorker | None = None
         self.latest_update_info: UpdateInfo | None = None
+        self._running_workers: set[QThread] = set()
 
         app = QApplication.instance()
         if app and not app.styleSheet():
@@ -210,6 +231,13 @@ class MainWindow(QMainWindow):
         # Check for updates in background on launch if enabled
         if config.check_updates_on_launch:
             QTimer.singleShot(2500, self._check_updates_quietly)
+        QTimer.singleShot(5000, cache.clean_old_cache_if_needed)
+
+    def _start_worker(self, worker: QThread):
+        """Starts a QThread and retains a reference until it finishes so Python GC never destroys a running thread."""
+        self._running_workers.add(worker)
+        worker.finished.connect(lambda w=worker: self._running_workers.discard(w))
+        worker.start()
 
     def _init_ui(self):
         central_widget = QWidget()
@@ -525,9 +553,9 @@ class MainWindow(QMainWindow):
         self.moe_res_combo.currentIndexChanged.connect(lambda: self.perform_search(page=1))
         moe_layout.addWidget(self.moe_res_combo)
 
-        moe_badge = QLabel("🎬 20 000+ Video Wallpapers (MP4)")
-        moe_badge.setStyleSheet("color: #38bdf8; font-size: 11px; font-weight: bold; margin-left: 8px;")
-        moe_layout.addWidget(moe_badge)
+        self.moe_badge = QLabel(tr("moe_badge"))
+        self.moe_badge.setStyleSheet("color: #38bdf8; font-size: 11px; font-weight: bold; margin-left: 8px;")
+        moe_layout.addWidget(self.moe_badge)
 
         moe_layout.addStretch()
         self.canvas_vlayout.addWidget(self.moe_filter_bar)
@@ -630,9 +658,9 @@ class MainWindow(QMainWindow):
         self.pfps_sort_combo.currentIndexChanged.connect(lambda: self.perform_search(page=1))
         pfps_layout.addWidget(self.pfps_sort_combo)
 
-        pfps_badge = QLabel("🎭 pfps.gg Avatars & GIFs")
-        pfps_badge.setStyleSheet("color: #ec4899; font-size: 11px; font-weight: bold; margin-left: 8px;")
-        pfps_layout.addWidget(pfps_badge)
+        self.pfps_badge = QLabel("🎭 pfps.gg Avatars & GIFs")
+        self.pfps_badge.setStyleSheet("color: #ec4899; font-size: 11px; font-weight: bold; margin-left: 8px;")
+        pfps_layout.addWidget(self.pfps_badge)
 
         pfps_layout.addStretch()
         self.canvas_vlayout.addWidget(self.pfps_filter_bar)
@@ -899,6 +927,9 @@ class MainWindow(QMainWindow):
         self.pfps_sort_lbl.setText(tr("pfps_sort_label"))
         self._retranslate_pfps_combos()
 
+        if hasattr(self, "moe_badge"):
+            self.moe_badge.setText(tr("moe_badge"))
+
         if hasattr(self, "reset_filter_btn"):
             self.reset_filter_btn.setToolTip(tr("reset_filters_tip"))
 
@@ -1056,14 +1087,14 @@ class MainWindow(QMainWindow):
 
     def _check_updates_quietly(self):
         """Asynchronously checks GitHub for updates after app startup (throttled to once every 4h)."""
-        if not config.get("auto_check_updates", True):
+        if not config.check_updates_on_launch:
             return
         last_check = config.last_update_check
         if time.time() - last_check < 4 * 3600:
             return
         self.update_check_worker = UpdateCheckWorker(current_ver=__version__, parent=self)
         self.update_check_worker.check_finished.connect(self._on_quiet_update_check_finished)
-        self.update_check_worker.start()
+        self._start_worker(self.update_check_worker)
 
     def _on_quiet_update_check_finished(self, info: UpdateInfo):
         self.latest_update_info = info
@@ -1075,12 +1106,14 @@ class MainWindow(QMainWindow):
             if hasattr(self, "sidebar"):
                 self.sidebar.show_update_available(info.latest_version)
 
+    _on_update_check_finished = _on_quiet_update_check_finished
+
     def _open_update_dialog(self, info: UpdateInfo | None = None):
         """Opens the full-featured update dialog."""
         if not isinstance(info, UpdateInfo):
             info = self.latest_update_info
         if not info:
-            info = UpdateInfo(current_version=__version__, latest_version=f"v{__version__}")
+            info = UpdateInfo(current_version=__version__, latest_version="")
         dlg = UpdateDialog(info, self)
         dlg.exec()
 
@@ -1158,8 +1191,8 @@ class MainWindow(QMainWindow):
                 per_page=24,
             )
         elif self.current_mode == "pfps":
-            cat = self.pfps_cat_combo.currentData() or "anime"
-            sorting = self.pfps_sort_combo.currentData() or "top"
+            cat = self.pfps_cat_combo.currentData() or "all"
+            sorting = self.pfps_sort_combo.currentData() or "latest"
             self.active_search_worker = PfpsSearchWorker(
                 search_id=search_id,
                 query=query,
@@ -1169,7 +1202,7 @@ class MainWindow(QMainWindow):
             )
             self.active_search_worker.finished.connect(self._on_pfp_search_success)
             self.active_search_worker.failed.connect(self._on_search_failed)
-            self.active_search_worker.start()
+            self._start_worker(self.active_search_worker)
             return
         else:
             cats = self._get_categories_str()
@@ -1195,7 +1228,7 @@ class MainWindow(QMainWindow):
 
         self.active_search_worker.finished.connect(self._on_search_success)
         self.active_search_worker.failed.connect(self._on_search_failed)
-        self.active_search_worker.start()
+        self._start_worker(self.active_search_worker)
 
     def _on_search_success(self, search_id: int, result: SearchResult):
         if search_id != self.current_search_id:
@@ -1278,9 +1311,7 @@ class MainWindow(QMainWindow):
         self.search_input.setText(clean_tag)
         self.perform_search(page=1)
 
-    def _on_quick_download(self, item: WallpaperItem):
-        # User requested quick download from card button
-        # Respect user requirement: "Při každém stažení se zeptat dialogem na umístění"
+    def _get_suggested_filename(self, item: WallpaperItem) -> tuple[str, str]:
         is_animated = getattr(item, "is_animated", False)
         ext = ".mp4" if is_animated else (os.path.splitext(item.path)[1] or ".jpg")
 
@@ -1295,6 +1326,13 @@ class MainWindow(QMainWindow):
             suggested_name = f"moewalls-{clean_title}{ext}"
         else:
             suggested_name = f"wallhaven-{item.id}{ext}"
+        return suggested_name, ext
+
+    def _on_quick_download(self, item: WallpaperItem):
+        # User requested quick download from card button
+        # Respect user requirement: "Při každém stažení se zeptat dialogem na umístění"
+        is_animated = getattr(item, "is_animated", False)
+        suggested_name, ext = self._get_suggested_filename(item)
 
         default_dir = Path(config.default_download_dir)
         default_dir.mkdir(parents=True, exist_ok=True)
@@ -1325,9 +1363,9 @@ class MainWindow(QMainWindow):
         self.quick_download_worker.failed.connect(
             lambda err: QMessageBox.critical(self, tr("download_failed_title"), tr("download_failed_msg", error=err))
         )
-        self.quick_download_worker.start()
+        self._start_worker(self.quick_download_worker)
 
-    def _on_download_completed(self, path: str, item: WallpaperItem | None = None):
+    def _on_download_completed(self, path: str, item: WallpaperItem | None = None, force_set_wallpaper: bool = False):
         filename = os.path.basename(path)
         if item:
             try:
@@ -1335,7 +1373,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"Error registering downloaded wallpaper: {e}")
 
-        if config.auto_set_wallpaper:
+        if force_set_wallpaper or config.auto_set_wallpaper:
             ok, msg = set_desktop_wallpaper(
                 path,
                 config.custom_wallpaper_cmd,
@@ -1386,10 +1424,31 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, tr("uninstall_error_title"), tr("uninstall_error_msg", error=err))
 
     def _on_quick_set_wallpaper(self, item: WallpaperItem):
-        target_path = getattr(item, "local_path", "") or item.path
+        target_path = (
+            getattr(item, "local_path", "")
+            or installed_manager.get_installed_path(item)
+            or (item.path if item.path and os.path.exists(item.path) else "")
+        )
         if not target_path or not os.path.exists(target_path):
-            QMessageBox.warning(self, tr("set_wall_error_title"), "File not found on disk.")
-            return
+            # Remote wallpaper card: download automatically to default_download_dir and apply when finished!
+            suggested_name, _ = self._get_suggested_filename(item)
+            default_dir = Path(config.default_download_dir)
+            default_dir.mkdir(parents=True, exist_ok=True)
+            save_path = str(default_dir / suggested_name)
+            if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+                target_path = save_path
+            else:
+                if hasattr(self, "toast"):
+                    self.toast.show_message(tr("toast_downloading_wallpaper", name=suggested_name), icon="⏳")
+                worker = DownloadWorker(item, save_path)
+                worker.finished.connect(
+                    lambda path, it=item: self._on_download_completed(path, it, force_set_wallpaper=True)
+                )
+                worker.failed.connect(
+                    lambda err: QMessageBox.critical(self, tr("download_failed_title"), tr("download_failed_msg", error=err))
+                )
+                self._start_worker(worker)
+                return
 
         ok, msg = set_desktop_wallpaper(
             target_path,
@@ -1414,36 +1473,44 @@ class MainWindow(QMainWindow):
 
     def _on_pfp_download(self, item: PfpItem):
         self.status_bar.showMessage(tr("pfp_downloading_status", title=item.title))
-        ok, res = pfps_client.download_pfp(item)
-        if ok:
-            self.status_bar.showMessage(tr("pfp_saved_status", path=res), 8000)
-            if hasattr(self, "toast"):
-                self.toast.show_message(tr("toast_pfp_saved", filename=os.path.basename(res)), icon="💾")
-        else:
-            QMessageBox.critical(
-                self,
-                tr("pfp_download_error_title"),
-                tr("pfp_download_error_msg", error=res),
-            )
+        worker = PfpActionWorker(item, "download")
+        worker.finished.connect(self._on_pfp_action_finished)
+        self._start_worker(worker)
 
     def _on_pfp_set_avatar(self, item: PfpItem):
         self.status_bar.showMessage(tr("pfp_setting_avatar_status", title=item.title))
-        ok, msg = pfps_client.set_system_avatar(item)
-        if ok:
-            self.status_bar.showMessage(f"✓ {msg}", 8000)
-            if hasattr(self, "toast"):
-                self.toast.show_message(tr("toast_pfp_avatar_set"), icon="👤")
-            QMessageBox.information(
-                self,
-                tr("pfp_avatar_changed_title"),
-                msg,
-            )
+        worker = PfpActionWorker(item, "avatar")
+        worker.finished.connect(self._on_pfp_action_finished)
+        self._start_worker(worker)
+
+    def _on_pfp_action_finished(self, ok: bool, res: str, item: PfpItem, action: str):
+        if action == "download":
+            if ok:
+                self.status_bar.showMessage(tr("pfp_saved_status", path=res), 8000)
+                if hasattr(self, "toast"):
+                    self.toast.show_message(tr("toast_pfp_saved", filename=os.path.basename(res)), icon="💾")
+            else:
+                QMessageBox.critical(
+                    self,
+                    tr("pfp_download_error_title"),
+                    tr("pfp_download_error_msg", error=res),
+                )
         else:
-            QMessageBox.warning(
-                self,
-                tr("pfp_avatar_error_title"),
-                msg,
-            )
+            if ok:
+                self.status_bar.showMessage(f"✓ {res}", 8000)
+                if hasattr(self, "toast"):
+                    self.toast.show_message(tr("toast_pfp_avatar_set"), icon="👤")
+                QMessageBox.information(
+                    self,
+                    tr("pfp_avatar_changed_title"),
+                    res,
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    tr("pfp_avatar_error_title"),
+                    res,
+                )
 
     def _on_pfp_copy(self, item: PfpItem):
         self.status_bar.showMessage(tr("pfp_copied_status", title=item.title), 6000)

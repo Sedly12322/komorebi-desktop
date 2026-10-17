@@ -101,6 +101,7 @@ class DetailDialog(QDialog):
     tag_clicked = pyqtSignal(str)
     download_completed = pyqtSignal(str)
     uninstalled = pyqtSignal(WallpaperItem)
+    _lingering_workers: set = set()
 
     def __init__(self, item: WallpaperItem, parent=None):
         super().__init__(parent)
@@ -435,7 +436,7 @@ class DetailDialog(QDialog):
         if getattr(self.item, "is_animated", False):
             add_meta_row("format", tr("meta_format"), "MP4 (Video 60fps)")
             add_meta_row("category", tr("meta_category"), self.item.category.capitalize())
-            add_meta_row("source", "Zdroj / Provider", "MoeWalls Live")
+            add_meta_row("source", tr("meta_source"), "MoeWalls Live")
         else:
             add_meta_row("file_size", tr("meta_file_size"), self.item.human_file_size)
             add_meta_row("format", tr("meta_format"), self.item.file_type or "image/jpeg")
@@ -556,6 +557,7 @@ class DetailDialog(QDialog):
             "purity": "meta_purity",
             "views": "meta_views",
             "favorites": "meta_favorites",
+            "source": "meta_source",
         }
         for k, tr_key in meta_keys.items():
             if k in self.meta_labels:
@@ -577,6 +579,32 @@ class DetailDialog(QDialog):
         url = getattr(self, "_preview_url", None)
         if url:
             loader.unregister_callback(url, self._on_preview_loaded)
+        try:
+            i18n.language_changed.disconnect(self.retranslate_ui)
+        except Exception:
+            pass
+        for w_attr in ("download_worker", "fetch_worker"):
+            worker = getattr(self, w_attr, None)
+            if worker is not None:
+                if hasattr(worker, "cancel"):
+                    worker.cancel()
+                try:
+                    worker.finished.disconnect()
+                except Exception:
+                    pass
+                try:
+                    worker.failed.disconnect()
+                except Exception:
+                    pass
+                if hasattr(worker, "progress"):
+                    try:
+                        worker.progress.disconnect()
+                    except Exception:
+                        pass
+                if worker.isRunning():
+                    DetailDialog._lingering_workers.add(worker)
+                    worker.finished.connect(lambda w=worker: DetailDialog._lingering_workers.discard(w))
+                setattr(self, w_attr, None)
 
     def _on_preview_loaded(self, pixmap: QPixmap):
         self._update_preview(pixmap)

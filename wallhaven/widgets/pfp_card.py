@@ -270,6 +270,9 @@ class PfpCard(QFrame):
         self.set_avatar_requested.emit(self.item)
 
     def _on_copy_clicked(self):
+        pm = self._pixmap or cache.get_pixmap(self.item.url, is_thumb=True)
+        if pm and not pm.isNull():
+            pfps_client.copy_image_to_clipboard(pm)
         self.copy_requested.emit(self.item)
 
     def mousePressEvent(self, event):

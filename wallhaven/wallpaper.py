@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -473,12 +474,12 @@ def _set_desktop_wallpaper_impl(
 
     # 1. Custom video command specified and file is video
     if is_video and custom_video_cmd.strip():
-        cmd_str = custom_video_cmd.replace("{file}", f'"{abs_path}"')
+        cmd_str = _substitute_file_placeholder(custom_video_cmd, abs_path)
         return _run_shell_cmd(cmd_str, abs_path)
 
     # 2. General custom command specified
     if custom_cmd.strip() and (setter_id == "custom" or setter_id == "vlastni"):
-        cmd_str = custom_cmd.replace("{file}", f'"{abs_path}"')
+        cmd_str = _substitute_file_placeholder(custom_cmd, abs_path)
         return _run_shell_cmd(cmd_str, abs_path)
 
     # 3. Explicit setter selected
@@ -490,7 +491,7 @@ def _set_desktop_wallpaper_impl(
         if is_video:
             if shutil.which("lively") or shutil.which("Lively"):
                 cmd = "lively" if shutil.which("lively") else "Lively"
-                return _run_shell_cmd(f'{cmd} setwp --file "{abs_path}"', abs_path)
+                return _run_cmd_list([cmd, "setwp", "--file", abs_path], abs_path)
             return False, tr("win_lively_req")
         try:
             import ctypes
@@ -542,6 +543,14 @@ def _set_desktop_wallpaper_impl(
             return False, str(e)
 
     cmd = [arg.replace("{file}", abs_path) for arg in cmd_template]
+    if cmd and cmd[0] in ("mpvpaper", "swaybg", "xwinwrap"):
+        kill_map = {
+            "mpvpaper": ["pkill", "mpvpaper"],
+            "swaybg": ["pkill", "swaybg"],
+            "xwinwrap": ["pkill", "-f", "mpv.*--wid"],
+        }
+        return _spawn_daemon(kill_map[cmd[0]], cmd, abs_path)
+
     try:
         res = subprocess.run(
             cmd,
@@ -560,11 +569,28 @@ def _set_desktop_wallpaper_impl(
 
 def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tuple[bool, str]:
     """Applies a user-chosen wallpaper setter."""
-    if setter_id == "quickshell":
+    if setter_id == "hyprland_script":
+        hypr_script = Path.home() / ".config/hypr/scripts/set-wallpaper.sh"
+        if not hypr_script.exists():
+            return False, tr("hypr_script_not_found")
+        return _run_cmd_list(["bash", str(hypr_script), abs_path], abs_path)
+
+    elif setter_id == "awww":
+        if not shutil.which("awww"):
+            return False, tr("awww_not_installed")
+        cmd = ["awww", "img", abs_path, "--transition-type", "fade", "--transition-duration", "1"]
+        return _run_cmd_list(cmd, abs_path)
+
+    elif setter_id == "quickshell":
         qs_entry = find_quickshell_entry()
-        if not qs_entry:
-            return False, tr("quickshell_not_found")
-        cmd = ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", abs_path, "fade"]
+        if qs_entry and shutil.which("qs"):
+            cmd = ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", abs_path, "fade"]
+        else:
+            qs_script = Path.home() / ".config/quickshell/ii/scripts/colors/switchwall.sh"
+            if qs_script.exists() and os.access(qs_script, os.X_OK):
+                cmd = [str(qs_script), "--image", abs_path]
+            else:
+                return False, tr("quickshell_not_found")
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
             if res.returncode == 0:
@@ -577,8 +603,11 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     elif setter_id == "mpvpaper":
         if not shutil.which("mpvpaper"):
             return False, tr("mpvpaper_not_installed")
-        cmd_str = f"pkill mpvpaper 2>/dev/null; mpvpaper -vs -o 'no-audio --loop' '*' '{abs_path}' &"
-        return _run_shell_cmd(cmd_str, abs_path)
+        return _spawn_daemon(
+            ["pkill", "mpvpaper"],
+            ["mpvpaper", "-vs", "-o", "no-audio --loop", "*", abs_path],
+            abs_path,
+        )
 
     elif setter_id == "hyprpaper":
         if not shutil.which("hyprpaper") or not shutil.which("hyprctl"):
@@ -596,8 +625,11 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     elif setter_id == "swaybg":
         if not shutil.which("swaybg"):
             return False, tr("swaybg_not_installed")
-        cmd_str = f"pkill swaybg 2>/dev/null; swaybg -i '{abs_path}' -m fill &"
-        return _run_shell_cmd(cmd_str, abs_path)
+        return _spawn_daemon(
+            ["pkill", "swaybg"],
+            ["swaybg", "-i", abs_path, "-m", "fill"],
+            abs_path,
+        )
 
     elif setter_id == "waypaper":
         if not shutil.which("waypaper"):
@@ -631,8 +663,8 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "xfce":
-        cmd_str = f'xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "{abs_path}"'
-        return _run_shell_cmd(cmd_str, abs_path)
+        cmd = ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", abs_path]
+        return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "feh":
         if not shutil.which("feh"):
@@ -649,8 +681,11 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     elif setter_id == "xwinwrap":
         if not shutil.which("xwinwrap") or not shutil.which("mpv"):
             return False, tr("xwinwrap_not_installed")
-        cmd_str = f"pkill -f 'mpv.*--wid' 2>/dev/null; xwinwrap -ov -fs -- mpv -wid WID --loop --no-audio '{abs_path}' &"
-        return _run_shell_cmd(cmd_str, abs_path)
+        return _spawn_daemon(
+            ["pkill", "-f", "mpv.*--wid"],
+            ["xwinwrap", "-ov", "-fs", "--", "mpv", "-wid", "WID", "--loop", "--no-audio", abs_path],
+            abs_path,
+        )
 
     elif setter_id == "win_api":
         try:
@@ -673,26 +708,64 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     elif setter_id == "win_lively":
         if shutil.which("lively") or shutil.which("Lively"):
             cmd = "lively" if shutil.which("lively") else "Lively"
-            return _run_shell_cmd(f'{cmd} setwp --file "{abs_path}"', abs_path)
+            return _run_cmd_list([cmd, "setwp", "--file", abs_path], abs_path)
         return False, tr("win_lively_req")
 
     return False, tr("unknown_setter", setter=setter_id)
 
 
+def _substitute_file_placeholder(cmd_template_str: str, abs_path: str) -> str:
+    """Safely substitutes {file} in a custom shell command without double-quoting or injection."""
+    quoted = f'"{abs_path}"' if sys.platform == "win32" else shlex.quote(abs_path)
+    res = cmd_template_str
+    res = res.replace("'{file}'", quoted).replace('"{file}"', quoted)
+    res = res.replace("{file}", quoted)
+    return res
+
+
+def _spawn_daemon(kill_cmd: list[str], daemon_cmd: list[str], abs_path: str) -> Tuple[bool, str]:
+    """Terminates any previous wallpaper daemon instance and launches a new background daemon without hanging pipes."""
+    try:
+        subprocess.run(
+            kill_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except Exception:
+        pass
+    try:
+        kwargs = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "stdin": subprocess.DEVNULL,
+        }
+        if sys.platform != "win32":
+            kwargs["start_new_session"] = True
+        subprocess.Popen(daemon_cmd, **kwargs)
+        _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
+        return True, tr("toast_wall_set_success")
+    except Exception as e:
+        return False, str(e)
+
+
 def _run_shell_cmd(cmd_str: str, abs_path: str) -> Tuple[bool, str]:
     try:
+        # If the custom shell command ends with '&', don't capture stdout/stderr pipes that a background child would keep open
+        is_bg = cmd_str.rstrip().endswith("&")
         res = subprocess.run(
             cmd_str,
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL if is_bg else subprocess.PIPE,
+            stderr=subprocess.DEVNULL if is_bg else subprocess.PIPE,
             text=True,
             timeout=15,
         )
         if res.returncode == 0:
             _send_notification(tr("toast_wall_changed"), tr("toast_wall_set_to", name=os.path.basename(abs_path)))
             return True, tr("toast_wall_set_success")
-        return False, tr("cmd_failed_err", error=f"({res.returncode}): {res.stderr.strip()}")
+        err_text = (res.stderr or "").strip()
+        return False, tr("cmd_failed_err", error=f"({res.returncode}): {err_text}")
     except Exception as e:
         return False, str(e)
 
