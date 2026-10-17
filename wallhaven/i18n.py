@@ -457,6 +457,18 @@ TRANSLATIONS = {
         "awww_not_installed": "awww is not installed.",
         "hypr_script_not_found": "Hyprland script ~/.config/hypr/scripts/set-wallpaper.sh was not found.",
         "toast_downloading_wallpaper": "Downloading wallpaper {name} before setting...",
+        "card_size_compact_tip": "Compact grid (Smaller cards)",
+        "card_size_normal_tip": "Balanced grid (Standard cards)",
+        "card_size_large_tip": "Large showcase (Big previews)",
+        "grid_empty_title": "No items found",
+        "grid_empty_sub": "Try adjusting your search query or filters above.",
+        "grid_loading_title": "Loading gallery...",
+        "detail_prev_tip": "Previous wallpaper (←)",
+        "detail_next_tip": "Next wallpaper (→)",
+        "detail_copy_btn": "📋 Copy Image to Clipboard",
+        "detail_copied_btn": "✓ Copied to Clipboard",
+        "detail_color_search_tip": "Click to search wallpapers with color {color}",
+        "card_installed_badge": "✓ INSTALLED",
     },
     "cs": {
         # App & Header
@@ -911,6 +923,18 @@ TRANSLATIONS = {
         "awww_not_installed": "awww není nainstalováno.",
         "hypr_script_not_found": "Hyprland skript ~/.config/hypr/scripts/set-wallpaper.sh nebyl nalezen.",
         "toast_downloading_wallpaper": "Stahuji tapetu {name} před nastavením...",
+        "card_size_compact_tip": "Kompaktní mřížka (menší karty)",
+        "card_size_normal_tip": "Střední mřížka (výchozí velikost)",
+        "card_size_large_tip": "Velké náhledy (detailní karty)",
+        "grid_empty_title": "Žádné položky nenalezeny",
+        "grid_empty_sub": "Zkuste upravit hledaný výraz nebo filtry na horní liště.",
+        "grid_loading_title": "Načítám galerii...",
+        "detail_prev_tip": "Předchozí tapeta (←)",
+        "detail_next_tip": "Další tapeta (→)",
+        "detail_copy_btn": "📋 Kopírovat obrázek do schránky",
+        "detail_copied_btn": "✓ Zkopírováno do schránky",
+        "detail_color_search_tip": "Kliknutím vyhledáte tapety s barvou {color}",
+        "card_installed_badge": "✓ STAŽENO",
     }
 }
 

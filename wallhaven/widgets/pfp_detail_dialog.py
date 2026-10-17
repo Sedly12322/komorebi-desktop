@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
 )
 from wallhaven.pfps import PfpItem, pfps_client
 from wallhaven.cache import cache
+from wallhaven.config import config
+from wallhaven.styles import get_palette
 from wallhaven.i18n import tr
 
 
@@ -73,6 +75,16 @@ class PfpDetailDialog(QDialog):
         self._start_asset_loading()
 
     def _init_ui(self):
+        pal = get_palette(config.theme)
+        bg_base = pal.get("bg_base", "#090b10")
+        bg_card = pal.get("bg_card", "#12151f")
+        bg_surface = pal.get("bg_surface", "#1e2434")
+        border = pal.get("border", "#283045")
+        accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        text_pri = pal.get("text_primary", "#f8fafc")
+        text_sec = pal.get("text_secondary", "#94a3b8")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
@@ -82,16 +94,16 @@ class PfpDetailDialog(QDialog):
         header_row.setSpacing(8)
 
         title_lbl = QLabel(self.item.title)
-        title_lbl.setStyleSheet("font-size: 16px; font-weight: 800; color: #f8fafc;")
+        title_lbl.setStyleSheet(f"font-size: 16px; font-weight: 800; color: {text_pri};")
         title_lbl.setWordWrap(True)
         header_row.addWidget(title_lbl, 1)
 
         fmt_text = "🎞️ GIF" if self.item.is_animated else f"🖼️ {self.item.format.upper()}"
         fmt_badge = QLabel(fmt_text)
-        fmt_badge.setStyleSheet("""
-            background: #1e2434;
-            color: #a5b4fc;
-            border: 1px solid #3b4252;
+        fmt_badge.setStyleSheet(f"""
+            background: {bg_surface};
+            color: {accent_hover};
+            border: 1px solid {border};
             border-radius: 6px;
             font-size: 11px;
             font-weight: 700;
@@ -102,20 +114,20 @@ class PfpDetailDialog(QDialog):
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(30, 30)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background: #151824;
-                color: #94a3b8;
-                border: 1px solid #232838;
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_sec};
+                border: 1px solid {border};
                 border-radius: 8px;
                 font-weight: bold;
                 font-size: 13px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #e11d48;
                 color: #ffffff;
                 border-color: #f43f5e;
-            }
+            }}
         """)
         close_btn.clicked.connect(self.accept)
         header_row.addWidget(close_btn)
@@ -126,19 +138,20 @@ class PfpDetailDialog(QDialog):
         self.preview_frame = QFrame()
         self.preview_frame.setObjectName("avatarPreviewBox")
         self.preview_frame.setFixedSize(440, 380)
-        self.preview_frame.setStyleSheet("""
-            QFrame#avatarPreviewBox {
-                background-color: #0b0d14;
-                border: 1.5px solid #1e2434;
+        self.preview_frame.setStyleSheet(f"""
+            QFrame#avatarPreviewBox {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {bg_base}, stop:1 {bg_card});
+                border: 1.5px solid {border};
+                border-top: 2px solid {accent};
                 border-radius: 16px;
-            }
+            }}
         """)
         preview_layout = QVBoxLayout(self.preview_frame)
         preview_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.preview_label = QLabel(tr("pfp_loading"))
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 600;")
+        self.preview_label.setStyleSheet(f"color: {text_sec}; font-size: 13px; font-weight: 600; background: transparent;")
         self.preview_label.setFixedSize(340, 340)
         preview_layout.addWidget(self.preview_label)
 
@@ -156,7 +169,7 @@ class PfpDetailDialog(QDialog):
         except Exception:
             dl_str = dl_raw or "0"
         dl_lbl = QLabel(f"⬇ {dl_str} {tr('pfp_downloads_suffix')}")
-        dl_lbl.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: 600;")
+        dl_lbl.setStyleSheet(f"color: {text_sec}; font-size: 12px; font-weight: 600;")
         meta_row.addWidget(dl_lbl)
 
         meta_row.addStretch()
@@ -164,18 +177,18 @@ class PfpDetailDialog(QDialog):
         web_btn = QPushButton("🌐 pfps.gg")
         web_btn.setToolTip(tr("pfp_open_web_tip"))
         web_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        web_btn.setStyleSheet("""
-            QPushButton {
+        web_btn.setStyleSheet(f"""
+            QPushButton {{
                 background: transparent;
-                color: #38bdf8;
+                color: {accent_hover};
                 border: none;
                 font-size: 12px;
                 font-weight: bold;
                 text-decoration: underline;
-            }
-            QPushButton:hover {
-                color: #7dd3fc;
-            }
+            }}
+            QPushButton:hover {{
+                color: #ffffff;
+            }}
         """)
         web_btn.clicked.connect(self._open_webpage)
         meta_row.addWidget(web_btn)
@@ -190,18 +203,18 @@ class PfpDetailDialog(QDialog):
         self.set_avatar_btn = QPushButton(tr("pfp_btn_set_avatar"))
         self.set_avatar_btn.setFixedHeight(38)
         self.set_avatar_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.set_avatar_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #8b5cf6);
+        self.set_avatar_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 {accent_hover});
                 color: #ffffff;
                 font-size: 13px;
                 font-weight: bold;
                 border-radius: 9px;
                 padding: 0 16px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #818cf8, stop:1 #a78bfa);
-            }
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent_hover}, stop:1 {accent});
+            }}
         """)
         self.set_avatar_btn.clicked.connect(self._on_set_system_avatar)
         action_row.addWidget(self.set_avatar_btn)
@@ -211,20 +224,21 @@ class PfpDetailDialog(QDialog):
         self.copy_btn.setFixedHeight(38)
         self.copy_btn.setToolTip(tr("pfp_copy_tip"))
         self.copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.copy_btn.setStyleSheet("""
-            QPushButton {
-                background: #1e2434;
-                color: #f8fafc;
+        self.copy_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_pri};
                 font-size: 13px;
                 font-weight: bold;
-                border: 1.5px solid #2d3748;
+                border: 1.5px solid {border};
                 border-radius: 9px;
                 padding: 0 14px;
-            }
-            QPushButton:hover {
-                background: #3b82f6;
-                border-color: #60a5fa;
-            }
+            }}
+            QPushButton:hover {{
+                background: {accent};
+                border-color: {accent_hover};
+                color: #ffffff;
+            }}
         """)
         self.copy_btn.clicked.connect(self._on_copy_clipboard)
         action_row.addWidget(self.copy_btn)
@@ -234,20 +248,21 @@ class PfpDetailDialog(QDialog):
         self.download_btn.setFixedHeight(38)
         self.download_btn.setToolTip(tr("pfp_download_tip"))
         self.download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.download_btn.setStyleSheet("""
-            QPushButton {
-                background: #1e2434;
-                color: #f8fafc;
+        self.download_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_pri};
                 font-size: 13px;
                 font-weight: bold;
-                border: 1.5px solid #2d3748;
+                border: 1.5px solid {border};
                 border-radius: 9px;
                 padding: 0 14px;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background: #10b981;
                 border-color: #34d399;
-            }
+                color: #ffffff;
+            }}
         """)
         self.download_btn.clicked.connect(self._on_download)
         action_row.addWidget(self.download_btn)

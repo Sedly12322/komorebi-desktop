@@ -322,6 +322,29 @@ class MainWindow(QMainWindow):
         """)
         s_layout.addWidget(self.shortcut_badge)
 
+        # Card Size Switcher Capsule (Compact / Normal / Large)
+        self.size_capsule = QFrame()
+        self.size_capsule.setObjectName("sizeSwitcherCapsule")
+        self.size_capsule.setFixedHeight(36)
+        sc_layout = QHBoxLayout(self.size_capsule)
+        sc_layout.setContentsMargins(3, 3, 3, 3)
+        sc_layout.setSpacing(2)
+
+        self.size_buttons: dict[str, QPushButton] = {}
+        cur_size = config.card_size
+        for mode_key, label in [("compact", "▪ S"), ("normal", "◼ M"), ("large", "⬛ L")]:
+            sbtn = QPushButton(label)
+            sbtn.setObjectName("sizeSwitcherBtn")
+            sbtn.setCheckable(True)
+            sbtn.setChecked(mode_key == cur_size)
+            sbtn.setFixedHeight(28)
+            sbtn.setCursor(Qt.CursorShape.PointingHandCursor)
+            sbtn.clicked.connect(lambda checked, m=mode_key: self._on_card_size_changed(m))
+            sc_layout.addWidget(sbtn)
+            self.size_buttons[mode_key] = sbtn
+
+        s_layout.addWidget(self.size_capsule)
+
         self.search_btn = QPushButton()
         self.search_btn.setObjectName("primaryButton")
         self.search_btn.setFixedHeight(38)
@@ -933,6 +956,19 @@ class MainWindow(QMainWindow):
         if hasattr(self, "reset_filter_btn"):
             self.reset_filter_btn.setToolTip(tr("reset_filters_tip"))
 
+        if hasattr(self, "size_buttons"):
+            tip_map = {
+                "compact": "card_size_compact_tip",
+                "normal": "card_size_normal_tip",
+                "large": "card_size_large_tip",
+            }
+            for m_key, sbtn in self.size_buttons.items():
+                if m_key in tip_map:
+                    sbtn.setToolTip(tr(tip_map[m_key]))
+
+        if hasattr(self, "grid_widget") and hasattr(self.grid_widget, "retranslate_ui"):
+            self.grid_widget.retranslate_ui()
+
         if hasattr(self, "sidebar"):
             self.sidebar.retranslate_ui()
         elif hasattr(self, "nav_capsule"):
@@ -961,6 +997,15 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "update_banner") and self.update_banner.isVisible() and self.latest_update_info:
             self.update_banner.show_update(self.latest_update_info)
+
+    def _on_card_size_changed(self, size_mode: str):
+        if hasattr(self, "size_buttons"):
+            for m_key, sbtn in self.size_buttons.items():
+                sbtn.blockSignals(True)
+                sbtn.setChecked(m_key == size_mode)
+                sbtn.blockSignals(False)
+        if hasattr(self, "grid_widget"):
+            self.grid_widget.set_card_size(size_mode)
 
     def _set_mode(self, mode: str):
         if hasattr(self, "sidebar"):
@@ -1080,6 +1125,8 @@ class MainWindow(QMainWindow):
                 self.sidebar.update_theme_display(config.theme)
             if hasattr(self, "pagination"):
                 self.pagination._apply_capsule_style()
+            if hasattr(self, "grid_widget") and hasattr(self.grid_widget, "refresh_theme"):
+                self.grid_widget.refresh_theme()
             if hasattr(self, "content_canvas") and hasattr(self.content_canvas, "set_effects_enabled"):
                 self.content_canvas.set_effects_enabled(config.background_effects)
             # If API key changed, refresh
@@ -1300,11 +1347,21 @@ class MainWindow(QMainWindow):
         if isinstance(item, PfpItem):
             self._on_pfp_clicked(item)
             return
-        dlg = DetailDialog(item, self)
+        dlg = DetailDialog(item, self, items_list=self.grid_widget.items)
         dlg.tag_clicked.connect(self._search_by_tag)
-        dlg.download_completed.connect(lambda p: self._on_download_completed(p, item))
+        dlg.color_clicked.connect(self._on_detail_color_clicked)
+        dlg.download_completed.connect(lambda p: self._on_download_completed(p, dlg.item))
         dlg.uninstalled.connect(lambda it: self.perform_search(page=self.current_page))
         dlg.exec()
+
+    def _on_detail_color_clicked(self, hex_code: str):
+        clean_hex = hex_code.lstrip("#")
+        if self.current_mode != "wallhaven":
+            self._set_mode("wallhaven")
+        self.color_toggle_btn.setChecked(True)
+        self.color_bar.setVisible(True)
+        self.current_color = clean_hex
+        self.perform_search(page=1)
 
     def _search_by_tag(self, tag_name: str):
         clean_tag = tag_name.lstrip("#")
@@ -1584,6 +1641,8 @@ class MainWindow(QMainWindow):
             self.sidebar.update_theme_display(theme_id)
         if hasattr(self, "pagination"):
             self.pagination._apply_capsule_style()
+        if hasattr(self, "grid_widget") and hasattr(self.grid_widget, "refresh_theme"):
+            self.grid_widget.refresh_theme()
         if hasattr(self, "content_canvas") and hasattr(self.content_canvas, "update"):
             self.content_canvas.update()
         if hasattr(self, "toast"):

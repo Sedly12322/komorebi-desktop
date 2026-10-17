@@ -1,5 +1,5 @@
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QColor, QPainter, QCursor
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QLinearGradient, QPen, QCursor
 from PyQt6.QtWidgets import (
     QFrame,
     QVBoxLayout,
@@ -11,6 +11,9 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect,
 )
 from wallhaven.api import WallpaperItem
+from wallhaven.config import config
+from wallhaven.styles import get_palette
+from wallhaven.installed import installed_manager
 from wallhaven.image_loader import loader
 from wallhaven.i18n import tr
 from wallhaven.widgets.shimmer import ShimmerLabel
@@ -27,21 +30,35 @@ class WallpaperCard(QFrame):
     IMAGE_WIDTH = 284
     IMAGE_HEIGHT = 172
 
-    def __init__(self, item: WallpaperItem, parent=None):
+    SIZE_PRESETS = {
+        "compact": (236, 176, 224, 130),
+        "normal": (296, 218, 284, 172),
+        "large": (368, 266, 356, 220),
+    }
+
+    def __init__(self, item: WallpaperItem, parent=None, size_mode: str = ""):
         super().__init__(parent)
         self.item = item
+        self.size_mode = size_mode or config.card_size
+        cw, ch, iw, ih = self.SIZE_PRESETS.get(self.size_mode, self.SIZE_PRESETS["normal"])
+        self._card_w = cw
+        self._card_h = ch
+        self._img_w = iw
+        self._img_h = ih
+        self._hovered = False
+
         self.setObjectName("wallpaperCard")
-        self.setFixedSize(self.CARD_WIDTH, self.CARD_HEIGHT)
+        self.setFixedSize(self._card_w, self._card_h)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._pixmap: QPixmap | None = None
         self._thumb_url = self.item.thumb_large or self.item.thumb_small or self.item.path
 
-        # Soft drop shadow with animated hover bloom
+        # Neon / Gaming drop shadow with animated hover bloom
         self._shadow = QGraphicsDropShadowEffect(self)
-        self._shadow.setBlurRadius(10)
-        self._shadow.setOffset(0, 3)
-        self._shadow.setColor(QColor(0, 0, 0, 75))
+        self._shadow.setBlurRadius(12)
+        self._shadow.setOffset(0, 4)
+        self._shadow.setColor(QColor(0, 0, 0, 95))
         self.setGraphicsEffect(self._shadow)
 
         self._anim_blur: QPropertyAnimation | None = None
@@ -51,32 +68,37 @@ class WallpaperCard(QFrame):
         self._load_thumbnail()
 
     def _init_ui(self):
+        pal = get_palette(config.theme)
+        accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        text_pri = pal.get("text_primary", "#f8fafc")
+
         card_layout = QVBoxLayout(self)
         card_layout.setContentsMargins(6, 6, 6, 6)
         card_layout.setSpacing(6)
 
         # 1. Image preview with animated skeleton shimmer
         self.image_label = ShimmerLabel(self, corner_radius=11)
-        self.image_label.setFixedSize(self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
+        self.image_label.setFixedSize(self._img_w, self._img_h)
 
         # In-image overlay layout
         overlay_layout = QVBoxLayout(self.image_label)
         overlay_layout.setContentsMargins(8, 8, 8, 8)
         overlay_layout.setSpacing(0)
 
-        # Top row inside image: Format/Live badge (left) & Resolution badge (right)
+        # Top row inside image: Format/Live/Installed badge (left) & Resolution badge (right)
         top_badge_row = QHBoxLayout()
         top_badge_row.setContentsMargins(0, 0, 0, 0)
-        top_badge_row.setSpacing(6)
+        top_badge_row.setSpacing(5)
 
         if getattr(self.item, "is_animated", False):
             self.live_badge = QLabel("▶ LIVE")
             self.live_badge.setToolTip(tr("card_live_tooltip"))
             self.live_badge.setStyleSheet("""
                 QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(6, 182, 212, 0.9), stop:1 rgba(99, 102, 241, 0.9));
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(6, 182, 212, 0.92), stop:1 rgba(139, 92, 246, 0.92));
                     color: #ffffff;
-                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    border: 1px solid rgba(255, 255, 255, 0.32);
                     border-radius: 6px;
                     font-weight: 800;
                     font-size: 9.5px;
@@ -84,6 +106,23 @@ class WallpaperCard(QFrame):
                 }
             """)
             top_badge_row.addWidget(self.live_badge)
+
+        is_installed_mode = getattr(self.item, "is_installed", False)
+        is_already_downloaded = not is_installed_mode and installed_manager.is_installed(self.item.id)
+        if is_already_downloaded:
+            self.inst_badge = QLabel(tr("card_installed_badge"))
+            self.inst_badge.setStyleSheet("""
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(5, 150, 105, 0.92), stop:1 rgba(16, 185, 129, 0.92));
+                    color: #ffffff;
+                    border: 1px solid rgba(52, 211, 153, 0.55);
+                    border-radius: 6px;
+                    font-weight: 800;
+                    font-size: 9px;
+                    padding: 2px 6px;
+                }
+            """)
+            top_badge_row.addWidget(self.inst_badge)
 
         top_badge_row.addStretch()
 
@@ -102,9 +141,9 @@ class WallpaperCard(QFrame):
         self.res_badge.setToolTip(f"{self.item.resolution} • {self.item.ratio}")
         if is_4k:
             self.res_badge.setStyleSheet("""
-                background-color: rgba(20, 20, 25, 0.85);
+                background-color: rgba(15, 15, 22, 0.88);
                 color: #fbbf24;
-                border: 1px solid rgba(245, 158, 11, 0.55);
+                border: 1px solid rgba(251, 191, 36, 0.65);
                 border-radius: 6px;
                 padding: 2px 7px;
                 font-size: 10px;
@@ -112,19 +151,19 @@ class WallpaperCard(QFrame):
             """)
         elif is_2k:
             self.res_badge.setStyleSheet("""
-                background-color: rgba(20, 20, 25, 0.85);
+                background-color: rgba(15, 15, 22, 0.88);
                 color: #38bdf8;
-                border: 1px solid rgba(56, 189, 248, 0.55);
+                border: 1px solid rgba(56, 189, 248, 0.65);
                 border-radius: 6px;
                 padding: 2px 7px;
                 font-size: 10px;
                 font-weight: 800;
             """)
         else:
-            self.res_badge.setStyleSheet("""
-                background-color: rgba(15, 18, 28, 0.82);
-                color: #cbd5e1;
-                border: 1px solid rgba(255, 255, 255, 0.12);
+            self.res_badge.setStyleSheet(f"""
+                background-color: rgba(12, 15, 24, 0.85);
+                color: {text_pri};
+                border: 1px solid rgba(255, 255, 255, 0.16);
                 border-radius: 6px;
                 padding: 2px 6px;
                 font-size: 9.5px;
@@ -135,66 +174,75 @@ class WallpaperCard(QFrame):
 
         overlay_layout.addStretch()
 
-        # Center/Bottom Floating Action Buttons (revealed on hover)
-        self.hover_bar = QWidget(self.image_label)
+        # Center/Bottom Floating Action Dock (revealed on hover)
+        self.hover_bar = QFrame(self.image_label)
         self.hover_bar.setObjectName("cardHoverBar")
-        self.hover_bar.setStyleSheet("background: transparent; border: none;")
-        self.hover_bar.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.hover_bar.setStyleSheet(f"""
+            QFrame#cardHoverBar {{
+                background-color: rgba(10, 12, 20, 0.78);
+                border: 1px solid {accent};
+                border-radius: 20px;
+            }}
+        """)
         self.hover_bar.setVisible(False)
+        hover_bar_wrap = QHBoxLayout()
+        hover_bar_wrap.setContentsMargins(0, 0, 0, 2)
+        hover_bar_wrap.addStretch()
+        hover_bar_wrap.addWidget(self.hover_bar)
+        hover_bar_wrap.addStretch()
+
         hover_layout = QHBoxLayout(self.hover_bar)
-        hover_layout.setContentsMargins(0, 0, 0, 4)
-        hover_layout.setSpacing(10)
+        hover_layout.setContentsMargins(8, 4, 8, 4)
+        hover_layout.setSpacing(8)
         hover_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        is_installed = getattr(self.item, "is_installed", False)
-
-        if is_installed:
+        if is_installed_mode:
             # Set wallpaper button
             self.set_wall_btn = QPushButton("🖼️")
-            self.set_wall_btn.setFixedSize(34, 34)
+            self.set_wall_btn.setFixedSize(32, 32)
             self.set_wall_btn.setToolTip(tr("card_set_wall_tooltip"))
             self.set_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.set_wall_btn.setStyleSheet(self._action_btn_style("#10b981", "#059669"))
+            self.set_wall_btn.setStyleSheet(self._action_btn_style("#10b981", "#34d399"))
             self.set_wall_btn.clicked.connect(lambda: self.set_wall_requested.emit(self.item))
             hover_layout.addWidget(self.set_wall_btn)
 
             # Delete / Uninstall button
             self.uninstall_btn = QPushButton("🗑️")
-            self.uninstall_btn.setFixedSize(34, 34)
+            self.uninstall_btn.setFixedSize(32, 32)
             self.uninstall_btn.setToolTip(tr("card_uninstall_tooltip"))
             self.uninstall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.uninstall_btn.setStyleSheet(self._action_btn_style("#ef4444", "#dc2626"))
+            self.uninstall_btn.setStyleSheet(self._action_btn_style("#ef4444", "#f87171"))
             self.uninstall_btn.clicked.connect(lambda: self.uninstall_requested.emit(self.item))
             hover_layout.addWidget(self.uninstall_btn)
         else:
             # Quick download button
             self.dl_btn = QPushButton("⬇")
-            self.dl_btn.setFixedSize(34, 34)
+            self.dl_btn.setFixedSize(32, 32)
             self.dl_btn.setToolTip(tr("card_download_tooltip"))
             self.dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.dl_btn.setStyleSheet(self._action_btn_style("#6366f1", "#4f46e5"))
+            self.dl_btn.setStyleSheet(self._action_btn_style(accent, accent_hover))
             self.dl_btn.clicked.connect(self._on_download_clicked)
             hover_layout.addWidget(self.dl_btn)
 
             # Quick set wallpaper button
             self.set_wall_btn = QPushButton("🖼️")
-            self.set_wall_btn.setFixedSize(34, 34)
+            self.set_wall_btn.setFixedSize(32, 32)
             self.set_wall_btn.setToolTip(tr("card_set_wall_tooltip"))
             self.set_wall_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.set_wall_btn.setStyleSheet(self._action_btn_style("#0ea5e9", "#0284c7"))
+            self.set_wall_btn.setStyleSheet(self._action_btn_style("#0ea5e9", "#38bdf8"))
             self.set_wall_btn.clicked.connect(lambda: self.set_wall_requested.emit(self.item))
             hover_layout.addWidget(self.set_wall_btn)
 
         # Quick view details button
         self.view_btn = QPushButton("🔍")
-        self.view_btn.setFixedSize(34, 34)
+        self.view_btn.setFixedSize(32, 32)
         self.view_btn.setToolTip(tr("card_view_tooltip"))
         self.view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.view_btn.setStyleSheet(self._action_btn_style("#64748b", "#475569"))
+        self.view_btn.setStyleSheet(self._action_btn_style(accent_hover, "#ffffff"))
         self.view_btn.clicked.connect(lambda: self.clicked.emit(self.item))
         hover_layout.addWidget(self.view_btn)
 
-        overlay_layout.addWidget(self.hover_bar)
+        overlay_layout.addLayout(hover_bar_wrap)
         card_layout.addWidget(self.image_label)
 
         # 2. Bottom info row (Metadata, Category, Purity, Favorites)
@@ -203,7 +251,7 @@ class WallpaperCard(QFrame):
         info_row.setSpacing(6)
 
         # Category badge
-        if is_installed:
+        if is_installed_mode:
             cat_badge = QLabel(self.item.source or "Installed")
             tooltip_text = f"{getattr(self.item, '_display_title', self.item.id)}\n{self.item.resolution} • {self.item.human_file_size}"
             if self.item.path:
@@ -252,7 +300,7 @@ class WallpaperCard(QFrame):
         # Favorites count
         if self.item.favorites > 0:
             fav_lbl = QLabel(f"★ {self.item.favorites:,}")
-            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 700;")
+            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 800;")
             info_row.addWidget(fav_lbl)
 
         card_layout.addLayout(info_row)
@@ -260,10 +308,10 @@ class WallpaperCard(QFrame):
     def _action_btn_style(self, bg_hover: str, border_hover: str) -> str:
         return f"""
             QPushButton {{
-                background-color: rgba(15, 23, 42, 0.88);
+                background-color: rgba(20, 27, 45, 0.92);
                 color: #ffffff;
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                border-radius: 17px;
+                border: 1.5px solid rgba(255, 255, 255, 0.22);
+                border-radius: 16px;
                 font-size: 13px;
                 font-weight: bold;
                 padding: 0;
@@ -279,7 +327,7 @@ class WallpaperCard(QFrame):
             self.image_label.setText(tr("card_no_preview"))
             return
 
-        target_size = (self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
+        target_size = (self._img_w, self._img_h)
         loader.load_thumbnail(
             self._thumb_url,
             target_size=target_size,
@@ -291,42 +339,68 @@ class WallpaperCard(QFrame):
         self._pixmap = pixmap
         self.image_label.set_loaded_pixmap(pixmap, animate=True)
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._hovered:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            pal = get_palette(config.theme)
+            c1 = QColor(pal.get("accent", "#6366f1"))
+            c2 = QColor(pal.get("accent_hover", "#a855f7"))
+            rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
+            path = QPainterPath()
+            path.addRoundedRect(rect, 13.0, 13.0)
+            grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
+            grad.setColorAt(0.0, c1)
+            grad.setColorAt(1.0, c2)
+            pen = QPen(grad, 2.2)
+            painter.strokePath(path, pen)
+            painter.end()
+
     def enterEvent(self, event):
         super().enterEvent(event)
+        self._hovered = True
         self.hover_bar.setVisible(True)
 
-        # Animate drop shadow bloom on hover
+        pal = get_palette(config.theme)
+        glow_col = QColor(pal.get("accent_hover", pal.get("accent", "#6366f1")))
+        glow_col.setAlpha(195)
+
+        # Animate drop shadow neon bloom on hover
         self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
-        self._anim_blur.setDuration(180)
-        self._anim_blur.setEndValue(24.0)
+        self._anim_blur.setDuration(200)
+        self._anim_blur.setEndValue(32.0)
         self._anim_blur.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         self._anim_offset = QPropertyAnimation(self._shadow, b"yOffset")
-        self._anim_offset.setDuration(180)
-        self._anim_offset.setEndValue(7.0)
+        self._anim_offset.setDuration(200)
+        self._anim_offset.setEndValue(8.0)
         self._anim_offset.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-        self._shadow.setColor(QColor(99, 102, 241, 110))
+        self._shadow.setColor(glow_col)
         self._anim_blur.start()
         self._anim_offset.start()
+        self.update()
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
+        self._hovered = False
         self.hover_bar.setVisible(False)
 
         self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
         self._anim_blur.setDuration(180)
-        self._anim_blur.setEndValue(10.0)
+        self._anim_blur.setEndValue(12.0)
         self._anim_blur.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         self._anim_offset = QPropertyAnimation(self._shadow, b"yOffset")
         self._anim_offset.setDuration(180)
-        self._anim_offset.setEndValue(3.0)
+        self._anim_offset.setEndValue(4.0)
         self._anim_offset.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-        self._shadow.setColor(QColor(0, 0, 0, 75))
+        self._shadow.setColor(QColor(0, 0, 0, 95))
         self._anim_blur.start()
         self._anim_offset.start()
+        self.update()
 
     def _cleanup_loader(self):
         if self._thumb_url:

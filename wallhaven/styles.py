@@ -1351,23 +1351,50 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
 }
 
-/* Wallpaper Card */
-QFrame#wallpaperCard {
-    background-color: %(bg_surface)s;
+/* Wallpaper & PFP Cards (Gaming / Neon Style) */
+QFrame#wallpaperCard, QFrame#pfpCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 %(bg_surface)s, stop:1 %(bg_subsurface)s);
     border: 1.5px solid %(border)s;
     border-radius: 14px;
 }
 
-QFrame#wallpaperCard:hover {
-    border: 1.5px solid %(accent)s;
-    background-color: %(bg_card_hover)s;
+QFrame#wallpaperCard:hover, QFrame#pfpCard:hover {
+    border: 2px solid %(accent_hover)s;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 %(bg_card_hover)s, stop:1 %(bg_surface)s);
+}
+
+/* Grid Size Switcher Capsule */
+QFrame#sizeSwitcherCapsule {
+    background-color: %(bg_input)s;
+    border: 1.5px solid %(border)s;
+    border-radius: 9px;
+}
+
+QPushButton#sizeSwitcherBtn {
+    background: transparent;
+    color: %(text_muted)s;
+    border: none;
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+QPushButton#sizeSwitcherBtn:hover {
+    color: %(text_primary)s;
+    background-color: %(bg_input_hover)s;
+}
+
+QPushButton#sizeSwitcherBtn:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %(accent_gradient_start)s, stop:1 %(accent_gradient_end)s);
+    color: %(accent_text)s;
 }
 
 /* Card Badges */
 QLabel#badge {
-    background-color: rgba(0, 0, 0, 0.70);
+    background-color: rgba(0, 0, 0, 0.75);
     color: %(text_primary)s;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 5px;
     padding: 2px 6px;
     font-size: 10.5px;
@@ -1375,13 +1402,13 @@ QLabel#badge {
 }
 
 QLabel#categoryBadge {
-    background-color: %(accent_surface)s;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %(accent_surface)s, stop:1 %(bg_input)s);
     color: %(text_primary)s;
     border: 1px solid %(accent)s;
-    border-radius: 5px;
-    padding: 2px 6px;
+    border-radius: 6px;
+    padding: 2px 7px;
     font-size: 10.5px;
-    font-weight: bold;
+    font-weight: 800;
 }
 
 /* Pagination Frame & Badges */

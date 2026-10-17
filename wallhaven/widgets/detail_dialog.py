@@ -4,6 +4,7 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl
 from PyQt6.QtGui import QPixmap, QDesktopServices, QColor
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QHBoxLayout,
     QVBoxLayout,
@@ -23,6 +24,7 @@ from wallhaven.config import config
 from wallhaven.image_loader import loader
 from wallhaven.wallpaper import set_desktop_wallpaper
 from wallhaven.i18n import tr, i18n
+from wallhaven.styles import get_palette
 
 try:
     from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -99,29 +101,34 @@ class DownloadWorker(QThread):
 
 class DetailDialog(QDialog):
     tag_clicked = pyqtSignal(str)
+    color_clicked = pyqtSignal(str)
     download_completed = pyqtSignal(str)
     uninstalled = pyqtSignal(WallpaperItem)
     _lingering_workers: set = set()
 
-    def __init__(self, item: WallpaperItem, parent=None):
+    def __init__(self, item: WallpaperItem, parent=None, items_list: list[WallpaperItem] | None = None):
         super().__init__(parent)
         self.item = item
+        self.items_list: list[WallpaperItem] = [
+            it for it in (items_list or []) if isinstance(it, WallpaperItem)
+        ]
+        self._current_index: int = -1
+        for idx, it in enumerate(self.items_list):
+            if it.id == item.id:
+                self._current_index = idx
+                break
+
         self.download_worker: DownloadWorker | None = None
         self.fetch_worker: DetailFetchWorker | None = None
         self.saved_path: str = ""
+        self._current_pixmap: QPixmap | None = None
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
 
-        if getattr(self.item, "_osu_meta", None):
-            self.setWindowTitle(f"osu! {self.item._osu_meta.get('season', '')} - #{self.item.id} ({self.item.resolution})")
-        elif getattr(self.item, "is_animated", False):
-            title = getattr(self.item, "_display_title", self.item.id)
-            self.setWindowTitle(f"🎬 {title} ({self.item.resolution}) - Live Wallpaper")
-        else:
-            self.setWindowTitle(tr("detail_title", id=item.id, res=item.resolution))
-
-        self.resize(1100, 720)
-        self.setMinimumSize(850, 550)
+        self._update_window_title()
+        self.resize(1120, 740)
+        self.setMinimumSize(860, 560)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         self._init_ui()
         self._check_installed_state()
@@ -129,7 +136,39 @@ class DetailDialog(QDialog):
         self._fetch_full_details()
         i18n.language_changed.connect(self.retranslate_ui)
 
+    def _update_window_title(self):
+        if getattr(self.item, "_osu_meta", None):
+            self.setWindowTitle(f"osu! {self.item._osu_meta.get('season', '')} - #{self.item.id} ({self.item.resolution})")
+        elif getattr(self.item, "is_animated", False):
+            title = getattr(self.item, "_display_title", self.item.id)
+            self.setWindowTitle(f"🎬 {title} ({self.item.resolution}) - Live Wallpaper")
+        else:
+            self.setWindowTitle(tr("detail_title", id=self.item.id, res=self.item.resolution))
+
+    def _get_header_html(self) -> str:
+        pal = get_palette(config.theme)
+        accent = pal.get("accent_hover", "#818cf8")
+        if getattr(self.item, "_osu_meta", None):
+            meta = self.item._osu_meta
+            title = meta.get("title", f"#{self.item.id}")
+            artist = meta.get("artist", "")
+            return f"<span style='font-size: 15px; font-weight: bold; color: #ffffff;'>{title}</span><br><span style='color: {accent}; font-size: 11px;'>🎵 {artist}</span>"
+        elif getattr(self.item, "is_animated", False):
+            title = getattr(self.item, "_display_title", self.item.id)
+            return f"<span style='font-size: 15px; font-weight: bold; color: #ffffff;'>{title}</span><br><span style='color: #06b6d4; font-size: 11px;'>🎬 MoeWalls Live Video</span>"
+        else:
+            return f"<span style='font-size: 16px; font-weight: bold; color: #ffffff;'>Wallhaven #{self.item.id}</span>"
+
     def _init_ui(self):
+        pal = get_palette(config.theme)
+        bg_card = pal.get("bg_card", "#141824")
+        bg_surface = pal.get("bg_surface", "#191f2d")
+        border = pal.get("border", "#232a3b")
+        accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        text_pri = pal.get("text_primary", "#f8fafc")
+        text_sec = pal.get("text_secondary", "#94a3b8")
+
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(16, 16, 16, 16)
         main_layout.setSpacing(16)
@@ -137,20 +176,78 @@ class DetailDialog(QDialog):
         # Left: Large Preview Container with StackedWidget (Index 0: Image, Index 1: Video)
         preview_container = QFrame()
         preview_container.setObjectName("previewContainer")
+        preview_container.setStyleSheet(f"""
+            QFrame#previewContainer {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {pal.get('bg_base', '#090b10')}, stop:1 {bg_card});
+                border: 1.5px solid {border};
+                border-radius: 14px;
+            }}
+        """)
         preview_layout = QVBoxLayout(preview_container)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
+        preview_layout.setSpacing(6)
+
+        # Top navigation bar inside preview container (Prev / Counter / Next)
+        nav_bar = QHBoxLayout()
+        nav_bar.setContentsMargins(6, 2, 6, 2)
+        nav_bar.setSpacing(8)
+
+        nav_btn_style = f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_pri};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 4px 12px;
+                font-size: 12px;
+                font-weight: 800;
+            }}
+            QPushButton:hover:enabled {{
+                background: {accent};
+                border-color: {accent_hover};
+                color: #ffffff;
+            }}
+            QPushButton:disabled {{
+                color: #475569;
+                background: rgba(15, 20, 30, 0.4);
+            }}
+        """
+
+        self.prev_item_btn = QPushButton("◀")
+        self.prev_item_btn.setFixedHeight(28)
+        self.prev_item_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.prev_item_btn.setToolTip(tr("detail_prev_tip"))
+        self.prev_item_btn.setStyleSheet(nav_btn_style)
+        self.prev_item_btn.clicked.connect(lambda: self._navigate_relative(-1))
+        nav_bar.addWidget(self.prev_item_btn)
+
+        self.nav_counter_lbl = QLabel("")
+        self.nav_counter_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.nav_counter_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11.5px; font-weight: 700; background: transparent;")
+        nav_bar.addWidget(self.nav_counter_lbl, stretch=1)
+
+        self.next_item_btn = QPushButton("▶")
+        self.next_item_btn.setFixedHeight(28)
+        self.next_item_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.next_item_btn.setToolTip(tr("detail_next_tip"))
+        self.next_item_btn.setStyleSheet(nav_btn_style)
+        self.next_item_btn.clicked.connect(lambda: self._navigate_relative(1))
+        nav_bar.addWidget(self.next_item_btn)
+
+        preview_layout.addLayout(nav_bar)
+        self._update_nav_buttons()
 
         self.preview_stack = QStackedWidget()
-        preview_layout.addWidget(self.preview_stack)
+        preview_layout.addWidget(self.preview_stack, stretch=1)
 
         # Page 0: Static image label
         self.preview_label = QLabel(tr("detail_loading_preview"))
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setStyleSheet("color: #64748b; font-size: 14px; font-weight: 500;")
+        self.preview_label.setStyleSheet(f"color: {text_sec}; font-size: 14px; font-weight: 500; background: transparent;")
         self.preview_stack.addWidget(self.preview_label)
 
         # Page 1: Video player if multimedia available
-        if HAS_MULTIMEDIA and getattr(self.item, "is_animated", False):
+        if HAS_MULTIMEDIA:
             video_box = QWidget()
             v_layout = QVBoxLayout(video_box)
             v_layout.setContentsMargins(0, 0, 0, 0)
@@ -167,50 +264,20 @@ class DetailDialog(QDialog):
 
             self.play_pause_btn = QPushButton(tr("media_pause"))
             self.play_pause_btn.setFixedHeight(28)
-            self.play_pause_btn.setStyleSheet("""
-                QPushButton {
-                    background: #191f2d;
-                    color: #e2e8f0;
-                    border: 1px solid #283144;
-                    border-radius: 6px;
-                    padding: 2px 10px;
-                    font-size: 11px;
-                    font-weight: 600;
-                }
-                QPushButton:hover {
-                    background: #252e42;
-                    border-color: #3b82f6;
-                    color: #ffffff;
-                }
-            """)
+            self.play_pause_btn.setStyleSheet(nav_btn_style)
             self.play_pause_btn.clicked.connect(self._toggle_playback)
             controls.addWidget(self.play_pause_btn)
 
             self.mute_btn = QPushButton(tr("audio_muted"))
             self.mute_btn.setFixedHeight(28)
-            self.mute_btn.setStyleSheet("""
-                QPushButton {
-                    background: #191f2d;
-                    color: #e2e8f0;
-                    border: 1px solid #283144;
-                    border-radius: 6px;
-                    padding: 2px 10px;
-                    font-size: 11px;
-                    font-weight: 600;
-                }
-                QPushButton:hover {
-                    background: #252e42;
-                    border-color: #3b82f6;
-                    color: #ffffff;
-                }
-            """)
+            self.mute_btn.setStyleSheet(nav_btn_style)
             self.mute_btn.clicked.connect(self._toggle_mute)
             controls.addWidget(self.mute_btn)
 
             controls.addStretch()
 
             self.live_tag = QLabel(tr("live_preview_loop"))
-            self.live_tag.setStyleSheet("color: #06b6d4; font-size: 11px; font-weight: bold;")
+            self.live_tag.setStyleSheet(f"color: {accent_hover}; font-size: 11px; font-weight: bold;")
             controls.addWidget(self.live_tag)
 
             v_layout.addLayout(controls)
@@ -231,7 +298,7 @@ class DetailDialog(QDialog):
         sidebar_scroll.setWidgetResizable(True)
         sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        sidebar_scroll.setFixedWidth(340)
+        sidebar_scroll.setFixedWidth(346)
         sidebar_scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -243,40 +310,30 @@ class DetailDialog(QDialog):
         sidebar.setObjectName("detailSidebar")
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setSpacing(12)
-        sidebar_layout.setContentsMargins(12, 12, 12, 12)
+        sidebar_layout.setContentsMargins(10, 8, 10, 10)
 
         # 1. Title / Header Row
         id_row = QHBoxLayout()
-        if getattr(self.item, "_osu_meta", None):
-            meta = self.item._osu_meta
-            title = meta.get("title", f"#{self.item.id}")
-            artist = meta.get("artist", "")
-            id_lbl = QLabel(f"<span style='font-size: 15px; font-weight: bold; color: #ffffff;'>{title}</span><br><span style='color: #818cf8; font-size: 11px;'>🎵 {artist}</span>")
-            id_lbl.setWordWrap(True)
-        elif getattr(self.item, "is_animated", False):
-            title = getattr(self.item, "_display_title", self.item.id)
-            id_lbl = QLabel(f"<span style='font-size: 15px; font-weight: bold; color: #ffffff;'>{title}</span><br><span style='color: #06b6d4; font-size: 11px;'>🎬 MoeWalls Live Video</span>")
-            id_lbl.setWordWrap(True)
-        else:
-            id_lbl = QLabel(f"<span style='font-size: 16px; font-weight: bold; color: #ffffff;'>Wallhaven #{self.item.id}</span>")
-        id_row.addWidget(id_lbl, stretch=1)
+        self.id_lbl = QLabel(self._get_header_html())
+        self.id_lbl.setWordWrap(True)
+        id_row.addWidget(self.id_lbl, stretch=1)
 
         self.open_web_btn = QPushButton(tr("detail_open_web"))
-        self.open_web_btn.setStyleSheet("""
-            QPushButton {
-                background: #191f2d;
-                color: #94a3b8;
-                border: 1px solid #283144;
+        self.open_web_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_sec};
+                border: 1px solid {border};
                 border-radius: 6px;
                 font-size: 11px;
                 padding: 4px 8px;
                 font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #252e42;
+            }}
+            QPushButton:hover {{
+                background: {accent};
                 color: #ffffff;
-                border-color: #3b82f6;
-            }
+                border-color: {accent_hover};
+            }}
         """)
         self.open_web_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_web_btn.clicked.connect(self._open_in_browser)
@@ -286,12 +343,13 @@ class DetailDialog(QDialog):
         # 2. Download & Action Section
         self.dl_frame = QFrame()
         self.dl_frame.setObjectName("downloadPanel")
-        self.dl_frame.setStyleSheet("""
-            QFrame#downloadPanel {
-                background: #141824;
-                border: 1px solid #232a3b;
-                border-radius: 10px;
-            }
+        self.dl_frame.setStyleSheet(f"""
+            QFrame#downloadPanel {{
+                background: {bg_card};
+                border: 1.5px solid {border};
+                border-top: 2px solid {accent};
+                border-radius: 12px;
+            }}
         """)
         dl_layout = QVBoxLayout(self.dl_frame)
         dl_layout.setContentsMargins(12, 12, 12, 12)
@@ -300,48 +358,52 @@ class DetailDialog(QDialog):
         self.dl_btn = QPushButton(tr("download_button"))
         self.dl_btn.setFixedHeight(40)
         self.dl_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.dl_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #4f46e5);
-                color: #ffffff;
-                font-weight: bold;
-                font-size: 13px;
-                border: none;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #818cf8, stop:1 #6366f1);
-            }
-            QPushButton:pressed {
-                background: #4338ca;
-            }
-            QPushButton:disabled {
-                background: #232a3b;
-                color: #64748b;
-            }
-        """)
+        self._apply_default_dl_btn_style()
         self.dl_btn.clicked.connect(self._on_download_clicked)
         dl_layout.addWidget(self.dl_btn)
 
+        # Copy Image to Clipboard button (for static wallpapers)
+        self.copy_img_btn = QPushButton(tr("detail_copy_btn"))
+        self.copy_img_btn.setFixedHeight(34)
+        self.copy_img_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.copy_img_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {bg_surface};
+                color: {text_pri};
+                border: 1px solid {border};
+                border-radius: 8px;
+                font-size: 12px;
+                font-weight: 700;
+            }}
+            QPushButton:hover {{
+                background: {accent};
+                border-color: {accent_hover};
+                color: #ffffff;
+            }}
+        """)
+        self.copy_img_btn.clicked.connect(self._on_copy_image_clicked)
+        self.copy_img_btn.setVisible(not getattr(self.item, "is_animated", False))
+        dl_layout.addWidget(self.copy_img_btn)
+
         self.set_wall_cb = QCheckBox(tr("set_wall_checkbox"))
         self.set_wall_cb.setChecked(config.auto_set_wallpaper)
-        self.set_wall_cb.setStyleSheet("""
-            QCheckBox {
-                color: #cbd5e1;
+        self.set_wall_cb.setStyleSheet(f"""
+            QCheckBox {{
+                color: {text_sec};
                 font-size: 12px;
                 spacing: 8px;
-            }
-            QCheckBox::indicator {
+            }}
+            QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
                 border-radius: 4px;
-                border: 1px solid #3b4252;
-                background: #161922;
-            }
-            QCheckBox::indicator:checked {
-                background: #6366f1;
-                border-color: #818cf8;
-            }
+                border: 1px solid {border};
+                background: {bg_surface};
+            }}
+            QCheckBox::indicator:checked {{
+                background: {accent};
+                border-color: {accent_hover};
+            }}
         """)
         dl_layout.addWidget(self.set_wall_cb)
 
@@ -353,7 +415,7 @@ class DetailDialog(QDialog):
 
         self.dl_status_lbl = QLabel("")
         self.dl_status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.dl_status_lbl.setStyleSheet("font-size: 12px; color: #94a3b8;")
+        self.dl_status_lbl.setStyleSheet(f"font-size: 12px; color: {text_sec};")
         self.dl_status_lbl.setWordWrap(True)
         self.dl_status_lbl.setVisible(False)
         dl_layout.addWidget(self.dl_status_lbl)
@@ -406,29 +468,116 @@ class DetailDialog(QDialog):
         # 3. Metadata Frame
         self.meta_frame = QFrame()
         self.meta_frame.setObjectName("metaFrame")
-        self.meta_frame.setStyleSheet("""
-            QFrame#metaFrame {
-                background: #141824;
-                border-radius: 10px;
-                border: 1px solid #232a3b;
-            }
+        self.meta_frame.setStyleSheet(f"""
+            QFrame#metaFrame {{
+                background: {bg_card};
+                border-radius: 12px;
+                border: 1px solid {border};
+            }}
         """)
-        meta_layout = QVBoxLayout(self.meta_frame)
-        meta_layout.setContentsMargins(12, 10, 12, 10)
-        meta_layout.setSpacing(6)
+        self.meta_layout = QVBoxLayout(self.meta_frame)
+        self.meta_layout.setContentsMargins(12, 10, 12, 10)
+        self.meta_layout.setSpacing(6)
 
         self.meta_labels = {}
+        self._populate_metadata()
+        sidebar_layout.addWidget(self.meta_frame)
+
+        # 4. Color Palette (Wallhaven — Clickable Color Search Chips)
+        self.colors_section = QWidget()
+        self.colors_section_layout = QVBoxLayout(self.colors_section)
+        self.colors_section_layout.setContentsMargins(0, 0, 0, 0)
+        self.colors_section_layout.setSpacing(6)
+
+        self.colors_title_lbl = QLabel(tr("meta_palette"))
+        self.colors_title_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11px; font-weight: bold;")
+        self.colors_section_layout.addWidget(self.colors_title_lbl)
+
+        self.colors_row_widget = QWidget()
+        self.colors_layout = QHBoxLayout(self.colors_row_widget)
+        self.colors_layout.setContentsMargins(0, 0, 0, 0)
+        self.colors_layout.setSpacing(6)
+        self.colors_section_layout.addWidget(self.colors_row_widget)
+
+        sidebar_layout.addWidget(self.colors_section)
+        self._populate_colors()
+
+        # 5. Tags Section
+        self.tags_title_lbl = QLabel(tr("tags_title"))
+        self.tags_title_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11px; font-weight: bold;")
+        sidebar_layout.addWidget(self.tags_title_lbl)
+
+        self.tags_frame = QFrame()
+        self.tags_frame.setObjectName("tagsFrame")
+        self.tags_frame.setStyleSheet(f"""
+            QFrame#tagsFrame {{
+                background: {bg_card};
+                border-radius: 12px;
+                border: 1px solid {border};
+            }}
+        """)
+        self.tags_layout = QVBoxLayout(self.tags_frame)
+        self.tags_layout.setContentsMargins(8, 8, 8, 8)
+        self.tags_layout.setSpacing(4)
+        self.tags_status_lbl = QLabel(tr("tags_loading"))
+        self.tags_status_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11px;")
+        self.tags_layout.addWidget(self.tags_status_lbl)
+
+        sidebar_layout.addWidget(self.tags_frame)
+        sidebar_layout.addStretch()
+
+        sidebar_scroll.setWidget(sidebar)
+        main_layout.addWidget(sidebar_scroll)
+
+    def _apply_default_dl_btn_style(self):
+        pal = get_palette(config.theme)
+        accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        border = pal.get("border", "#232a3b")
+        self.dl_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 {accent_hover});
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 13px;
+                border: none;
+                border-radius: 8px;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent_hover}, stop:1 {accent});
+            }}
+            QPushButton:disabled {{
+                background: {border};
+                color: #64748b;
+            }}
+        """)
+
+    def _populate_metadata(self):
+        while self.meta_layout.count():
+            child = self.meta_layout.takeAt(0)
+            if child.layout():
+                while child.layout().count():
+                    sub = child.layout().takeAt(0)
+                    if sub.widget():
+                        sub.widget().deleteLater()
+            elif child.widget():
+                child.widget().deleteLater()
+        self.meta_labels.clear()
+
+        pal = get_palette(config.theme)
+        text_pri = pal.get("text_primary", "#f1f5f9")
+        text_sec = pal.get("text_secondary", "#8590a6")
 
         def add_meta_row(key: str, label_text: str, val: str):
             r = QHBoxLayout()
             l = QLabel(label_text)
-            l.setStyleSheet("color: #8590a6; font-size: 12px;")
+            l.setStyleSheet(f"color: {text_sec}; font-size: 12px;")
             v = QLabel(f"<b>{val}</b>")
-            v.setStyleSheet("color: #f1f5f9; font-size: 12px;")
+            v.setStyleSheet(f"color: {text_pri}; font-size: 12px;")
             r.addWidget(l)
             r.addStretch()
             r.addWidget(v)
-            meta_layout.addLayout(r)
+            self.meta_layout.addLayout(r)
             self.meta_labels[key] = l
 
         add_meta_row("resolution", tr("meta_resolution"), self.item.resolution)
@@ -447,51 +596,138 @@ class DetailDialog(QDialog):
             if self.item.favorites > 0:
                 add_meta_row("favorites", tr("meta_favorites"), f"★ {self.item.favorites:,}")
 
-        sidebar_layout.addWidget(self.meta_frame)
+    def _populate_colors(self):
+        while self.colors_layout.count():
+            child = self.colors_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
 
-        # 4. Color Palette (Wallhaven)
-        if self.item.colors:
-            self.colors_title_lbl = QLabel(tr("meta_palette"))
-            self.colors_title_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
-            sidebar_layout.addWidget(self.colors_title_lbl)
+        if not self.item.colors:
+            self.colors_section.setVisible(False)
+            return
 
-            colors_layout = QHBoxLayout()
-            colors_layout.setSpacing(6)
-            for c in self.item.colors:
-                color_chip = QLabel()
-                color_chip.setFixedSize(24, 18)
-                color_chip.setStyleSheet(f"background-color: {c}; border-radius: 4px; border: 1px solid #2f384d;")
-                color_chip.setToolTip(c)
-                colors_layout.addWidget(color_chip)
-            colors_layout.addStretch()
-            sidebar_layout.addLayout(colors_layout)
+        self.colors_section.setVisible(True)
+        pal = get_palette(config.theme)
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        for c in self.item.colors:
+            color_chip = QPushButton("")
+            color_chip.setFixedSize(32, 22)
+            color_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            color_chip.setToolTip(tr("detail_color_search_tip", color=c))
+            color_chip.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {c};
+                    border-radius: 6px;
+                    border: 1.5px solid rgba(255, 255, 255, 0.22);
+                }}
+                QPushButton:hover {{
+                    border: 2px solid {accent_hover};
+                }}
+            """)
+            color_chip.clicked.connect(lambda checked, hex_col=c: self._on_color_chip_clicked(hex_col))
+            self.colors_layout.addWidget(color_chip)
+        self.colors_layout.addStretch()
 
-        # 5. Tags Section
-        self.tags_title_lbl = QLabel(tr("tags_title"))
-        self.tags_title_lbl.setStyleSheet("color: #94a3b8; font-size: 11px; font-weight: bold;")
-        sidebar_layout.addWidget(self.tags_title_lbl)
+    def _on_color_chip_clicked(self, hex_color: str):
+        clean_hex = hex_color.lstrip("#")
+        self.color_clicked.emit(clean_hex)
+        self.accept()
 
-        self.tags_frame = QFrame()
-        self.tags_frame.setObjectName("tagsFrame")
-        self.tags_frame.setStyleSheet("""
-            QFrame#tagsFrame {
-                background: #141824;
-                border-radius: 10px;
-                border: 1px solid #232a3b;
-            }
-        """)
-        self.tags_layout = QVBoxLayout(self.tags_frame)
-        self.tags_layout.setContentsMargins(8, 8, 8, 8)
-        self.tags_layout.setSpacing(4)
+    def _on_copy_image_clicked(self):
+        pm = None
+        if self.saved_path and os.path.exists(self.saved_path) and not getattr(self.item, "is_animated", False):
+            loaded_pm = QPixmap(self.saved_path)
+            if not loaded_pm.isNull():
+                pm = loaded_pm
+        if pm is None and self._current_pixmap and not self._current_pixmap.isNull():
+            pm = self._current_pixmap
+        if pm is not None and not pm.isNull():
+            QApplication.clipboard().setPixmap(pm)
+            self.copy_img_btn.setText(tr("detail_copied_btn"))
+
+    def _update_nav_buttons(self):
+        has_list = len(self.items_list) > 1 and self._current_index >= 0
+        self.prev_item_btn.setVisible(has_list)
+        self.next_item_btn.setVisible(has_list)
+        self.nav_counter_lbl.setVisible(has_list)
+        if has_list:
+            self.prev_item_btn.setEnabled(self._current_index > 0)
+            self.next_item_btn.setEnabled(self._current_index < len(self.items_list) - 1)
+            self.nav_counter_lbl.setText(f"{self._current_index + 1} / {len(self.items_list)}")
+
+    def _navigate_relative(self, delta: int):
+        if not self.items_list or self._current_index < 0:
+            return
+        new_idx = self._current_index + delta
+        if new_idx < 0 or new_idx >= len(self.items_list):
+            return
+
+        # Clean up current preview loader & fetch worker
+        old_url = getattr(self, "_preview_url", None)
+        if old_url:
+            loader.unregister_callback(old_url, self._on_preview_loaded)
+        if self.fetch_worker and self.fetch_worker.isRunning():
+            try:
+                self.fetch_worker.finished.disconnect()
+                self.fetch_worker.failed.disconnect()
+            except Exception:
+                pass
+            DetailDialog._lingering_workers.add(self.fetch_worker)
+            self.fetch_worker.finished.connect(lambda w=self.fetch_worker: DetailDialog._lingering_workers.discard(w))
+            self.fetch_worker = None
+        if self.player:
+            self.player.stop()
+
+        self._current_index = new_idx
+        self.item = self.items_list[new_idx]
+        self.saved_path = ""
+        self._current_pixmap = None
+
+        # Reset UI for new item
+        self._update_window_title()
+        self._update_nav_buttons()
+        self.id_lbl.setText(self._get_header_html())
+        self.preview_stack.setCurrentIndex(0)
+        self.preview_label.setPixmap(QPixmap())
+        self.preview_label.setText(tr("detail_loading_preview"))
+
+        self.dl_btn.setEnabled(True)
+        self.dl_btn.setText(tr("download_button"))
+        self._apply_default_dl_btn_style()
+        self.copy_img_btn.setVisible(not getattr(self.item, "is_animated", False))
+        self.copy_img_btn.setText(tr("detail_copy_btn"))
+        self.set_wall_cb.setVisible(True)
+        self.progress_bar.setVisible(False)
+        self.dl_status_lbl.setVisible(False)
+        self.set_wall_now_btn.setVisible(False)
+        self.open_folder_btn.setVisible(False)
+        self.uninstall_btn.setVisible(False)
+
+        self._populate_metadata()
+        self._populate_colors()
+
+        while self.tags_layout.count():
+            child = self.tags_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
         self.tags_status_lbl = QLabel(tr("tags_loading"))
         self.tags_status_lbl.setStyleSheet("color: #64748b; font-size: 11px;")
         self.tags_layout.addWidget(self.tags_status_lbl)
 
-        sidebar_layout.addWidget(self.tags_frame)
-        sidebar_layout.addStretch()
+        self._check_installed_state()
+        self._load_preview()
+        self._fetch_full_details()
 
-        sidebar_scroll.setWidget(sidebar)
-        main_layout.addWidget(sidebar_scroll)
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Left:
+            self._navigate_relative(-1)
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_Right:
+            self._navigate_relative(1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _toggle_playback(self):
         if not self.player:
@@ -514,14 +750,12 @@ class DetailDialog(QDialog):
             self.mute_btn.setText(tr("audio_unmuted"))
 
     def retranslate_ui(self):
-        if getattr(self.item, "_osu_meta", None):
-            self.setWindowTitle(f"osu! {self.item._osu_meta.get('season', '')} - #{self.item.id} ({self.item.resolution})")
-        elif getattr(self.item, "is_animated", False):
-            title = getattr(self.item, "_display_title", self.item.id)
-            self.setWindowTitle(f"🎬 {title} ({self.item.resolution}) - Live Wallpaper")
-        else:
-            self.setWindowTitle(tr("detail_title", id=self.item.id, res=self.item.resolution))
+        self._update_window_title()
         self.open_web_btn.setText(tr("detail_open_web"))
+        self.prev_item_btn.setToolTip(tr("detail_prev_tip"))
+        self.next_item_btn.setToolTip(tr("detail_next_tip"))
+        if hasattr(self, "copy_img_btn"):
+            self.copy_img_btn.setText(tr("detail_copy_btn"))
         if not self.saved_path:
             self.dl_btn.setText(tr("download_button"))
         else:
@@ -622,6 +856,7 @@ class DetailDialog(QDialog):
         super().reject()
 
     def _update_preview(self, pixmap: QPixmap):
+        self._current_pixmap = pixmap
         lbl_size = self.preview_label.size()
         w = max(400, lbl_size.width())
         h = max(300, lbl_size.height())
@@ -651,6 +886,8 @@ class DetailDialog(QDialog):
 
     def _on_details_fetched(self, full_item: WallpaperItem):
         self.item = full_item
+        self._populate_metadata()
+        self._populate_colors()
 
         # If animated wallpaper and has preview video URL, switch to video view!
         if HAS_MULTIMEDIA and getattr(full_item, "is_animated", False) and full_item.preview_video_url and self.player:
@@ -666,27 +903,33 @@ class DetailDialog(QDialog):
             if child.widget():
                 child.widget().deleteLater()
 
+        pal = get_palette(config.theme)
+        bg_surface = pal.get("bg_surface", "#191f2d")
+        border = pal.get("border", "#283347")
+        accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#a5b4fc")
+
         if full_item.tags:
             for tag in full_item.tags:
                 tag_name = tag.get("name", "")
                 tag_btn = QPushButton(f"#{tag_name}")
                 tag_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                tag_btn.setStyleSheet("""
-                    QPushButton {
-                        background: #191f2d;
-                        color: #a5b4fc;
-                        border: 1px solid #283347;
+                tag_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {bg_surface};
+                        color: {accent_hover};
+                        border: 1px solid {border};
                         border-radius: 6px;
                         padding: 4px 8px;
                         font-size: 11px;
                         text-align: left;
-                        font-weight: 500;
-                    }
-                    QPushButton:hover {
-                        background: #312e81;
+                        font-weight: 600;
+                    }}
+                    QPushButton:hover {{
+                        background: {accent};
                         color: #ffffff;
-                        border-color: #6366f1;
-                    }
+                        border-color: {accent_hover};
+                    }}
                 """)
                 tag_btn.clicked.connect(lambda checked, t=tag_name: self._on_tag_clicked(t))
                 self.tags_layout.addWidget(tag_btn)

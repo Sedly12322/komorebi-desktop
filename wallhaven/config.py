@@ -71,6 +71,7 @@ DEFAULT_CONFIG = {
     "background_effects": True,
     "check_updates_on_launch": True,
     "last_update_check": 0.0,
+    "card_size": "normal",
 }
 
 
@@ -207,6 +208,17 @@ class Config:
     @last_update_check.setter
     def last_update_check(self, val: float):
         self.set("last_update_check", float(val))
+
+    @property
+    def card_size(self) -> str:
+        val = str(self._config.get("card_size", "normal")).strip().lower()
+        return val if val in ("compact", "normal", "large") else "normal"
+
+    @card_size.setter
+    def card_size(self, val: str):
+        v = str(val).strip().lower()
+        if v in ("compact", "normal", "large"):
+            self.set("card_size", v)
 
 
 config = Config()

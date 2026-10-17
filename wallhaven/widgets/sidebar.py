@@ -144,59 +144,69 @@ class SidebarNavItem(QPushButton):
         self.subtitle_lbl.setText(subtitle)
 
     def _update_style(self):
+        pal = get_palette(config.theme)
+        text_pri = pal.get("text_primary", "#f8fafc")
+        text_sec = pal.get("text_secondary", "#cbd5e1")
+        text_mut = pal.get("text_muted", "#64748b")
+        accent = pal.get("accent", "#6366f1")
+        accent_text = pal.get("accent_text", "#ffffff")
+
         if self.is_active:
-            self.title_lbl.setStyleSheet("""
+            self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
                 font-weight: 800;
-                color: #ffffff;
+                color: {accent_text};
                 background: transparent;
             """)
-            self.subtitle_lbl.setStyleSheet("""
+            self.subtitle_lbl.setStyleSheet(f"""
                 font-size: 10px;
                 font-weight: 600;
-                color: #e0e7ff;
+                color: {accent_text};
                 background: transparent;
             """)
-            self.badge_lbl.setStyleSheet("""
-                background-color: rgba(255, 255, 255, 0.22);
-                color: #ffffff;
+            self.badge_lbl.setStyleSheet(f"""
+                background-color: rgba(255, 255, 255, 0.25);
+                color: {accent_text};
+                border: 1px solid rgba(255, 255, 255, 0.35);
                 border-radius: 9px;
                 padding: 2px 7px;
                 font-size: 10px;
                 font-weight: 800;
             """)
         else:
-            self.title_lbl.setStyleSheet("""
+            self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
                 font-weight: 700;
-                color: #cbd5e1;
+                color: {text_sec};
                 background: transparent;
             """)
-            self.subtitle_lbl.setStyleSheet("""
+            self.subtitle_lbl.setStyleSheet(f"""
                 font-size: 10px;
                 font-weight: 500;
-                color: #64748b;
+                color: {text_mut};
                 background: transparent;
             """)
-            self.badge_lbl.setStyleSheet("""
+            self.badge_lbl.setStyleSheet(f"""
                 background-color: rgba(255, 255, 255, 0.08);
-                color: #94a3b8;
+                color: {accent};
+                border: 1px solid rgba(255, 255, 255, 0.12);
                 border-radius: 9px;
                 padding: 2px 7px;
                 font-size: 10px;
-                font-weight: 700;
+                font-weight: 800;
             """)
 
-        self.setStyleSheet("""
-            QPushButton {
+        self.setStyleSheet(f"""
+            QPushButton {{
                 background: transparent;
                 border: none;
                 border-radius: 10px;
                 text-align: left;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.04);
-            }
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }}
         """)
 
 
@@ -225,10 +235,10 @@ class SidebarNavContainer(QWidget):
         # 1. Section Header: Feeds / Explore
         self.section_explore_lbl = QLabel(tr("nav_explore").upper() if tr("nav_explore") else "OBJEVOVAT")
         self.section_explore_lbl.setStyleSheet("""
-            color: #475569;
+            color: #64748b;
             font-size: 10px;
             font-weight: 800;
-            letter-spacing: 1.2px;
+            letter-spacing: 1.4px;
             padding: 8px 10px 4px 10px;
         """)
         self.main_layout.addWidget(self.section_explore_lbl)
@@ -254,10 +264,10 @@ class SidebarNavContainer(QWidget):
         # 2. Section Header: Library
         self.section_lib_lbl = QLabel(tr("nav_library").upper() if tr("nav_library") else "LIBRARY")
         self.section_lib_lbl.setStyleSheet("""
-            color: #475569;
+            color: #64748b;
             font-size: 10px;
             font-weight: 800;
-            letter-spacing: 1.2px;
+            letter-spacing: 1.4px;
             padding: 8px 10px 4px 10px;
         """)
         self.main_layout.addWidget(self.section_lib_lbl)
@@ -327,6 +337,26 @@ class SidebarNavContainer(QWidget):
         # Draw glowing animated pill behind the active item
         if self._indicator_rect.isValid() and self._indicator_rect.width() > 0:
             ir = self._indicator_rect
+            pal = get_palette(config.theme)
+            c_start = QColor(pal.get("accent_gradient_start", pal.get("accent", "#4f46e5")))
+            c_end = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#7c3aed")))
+            c_glow = QColor(pal.get("accent_hover", pal.get("accent", "#818cf8")))
+
+            # Outer neon halo layers
+            for expand, alpha in ((4.0, 26), (2.0, 52)):
+                halo_path = QPainterPath()
+                halo_path.addRoundedRect(
+                    float(ir.x()) - expand,
+                    float(ir.y()) - expand,
+                    float(ir.width()) + expand * 2,
+                    float(ir.height()) + expand * 2,
+                    12.0,
+                    12.0,
+                )
+                glow_col = QColor(c_glow)
+                glow_col.setAlpha(alpha)
+                painter.fillPath(halo_path, glow_col)
+
             pill_path = QPainterPath()
             pill_path.addRoundedRect(
                 float(ir.x()),
@@ -337,23 +367,19 @@ class SidebarNavContainer(QWidget):
                 10.0,
             )
 
-            # Dynamic linear gradient adapting to active theme palette
-            pal = get_palette(config.theme)
-            c_start = QColor(pal.get("accent_gradient_start", pal.get("accent", "#4f46e5")))
-            c_end = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#7c3aed")))
-            c_start.setAlpha(235)
-            c_end.setAlpha(235)
+            c_start.setAlpha(245)
+            c_end.setAlpha(245)
 
             grad = QLinearGradient(float(ir.x()), float(ir.y()), float(ir.x() + ir.width()), float(ir.y() + ir.height()))
             grad.setColorAt(0.0, c_start)
             grad.setColorAt(1.0, c_end)
             painter.fillPath(pill_path, grad)
 
-            # Subtle accent border sheen
-            sheen_color = QColor(c_start)
-            sheen_color.setAlpha(120)
+            # Vivid neon edge highlight
+            sheen_color = QColor(c_glow).lighter(125)
+            sheen_color.setAlpha(185)
             pen = QPen(sheen_color)
-            pen.setWidthF(1.2)
+            pen.setWidthF(1.5)
             painter.strokePath(pill_path, pen)
 
         painter.end()
@@ -596,6 +622,9 @@ class KomorebiSidebar(QFrame):
         short_name = theme_names.get(theme_id, theme_id.capitalize())
         theme_label = tr("theme_menu_title") or "Theme"
         self.theme_btn.setText(f"🎨  {theme_label}: {short_name}")
+        for btn in self.nav_container.buttons.values():
+            btn._update_style()
+        self._update_auto_wall_btn_style()
         self.nav_container.update()
 
     def retranslate_ui(self):
