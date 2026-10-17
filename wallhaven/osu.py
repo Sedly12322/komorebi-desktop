@@ -7,6 +7,11 @@ from wallhaven.api import WallpaperItem, SearchResult
 
 
 def _get_data_file() -> Path:
+    live_dir = os.environ.get("KOMOREBI_LIVE_APP_DIR")
+    if live_dir:
+        lp = Path(live_dir) / "wallhaven" / "data" / "osu_seasonal.json"
+        if lp.exists():
+            return lp
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         p = Path(sys._MEIPASS) / "wallhaven" / "data" / "osu_seasonal.json"
         if p.exists():

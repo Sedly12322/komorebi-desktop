@@ -1,6 +1,6 @@
-; Inno Setup Script for Komorebi Desktop
+; Inno Setup Script for Komorebi Desktop (Universal Auto-Updating Installer)
 #define MyAppName "Komorebi Desktop"
-#define MyAppVersion "2.0.2"
+#define MyAppVersion "2.0.3"
 #define MyAppPublisher "Sedly12322"
 #define MyAppURL "https://github.com/Sedly12322/komorebi-desktop"
 #define MyAppExeName "Komorebi-Desktop.exe"
@@ -42,4 +42,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFile
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\icon.ico"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--bootstrap-update"; StatusMsg: "Fetching latest Komorebi Desktop updates from GitHub..."; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{localappdata}\KomorebiDesktop\live_app"

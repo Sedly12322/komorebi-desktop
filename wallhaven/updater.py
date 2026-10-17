@@ -200,7 +200,65 @@ def check_for_updates_sync(current_ver: str = __version__) -> UpdateInfo:
     except Exception as e:
         info.error = str(e)
 
-    if not release_data:
+    if release_data:
+        tag = release_data.get("tag_name", "")
+        info.latest_version = tag
+        info.release_name = release_data.get("name") or f"Release {tag}"
+        info.release_notes = release_data.get("body") or ""
+        info.published_at = release_data.get("published_at", "")
+        info.html_url = release_data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}"
+        info.tarball_url = release_data.get("tarball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.tar.gz"
+        info.zipball_url = release_data.get("zipball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
+
+        # Assets inspection & SHA256 discovery
+        checksum_assets: list[tuple[str, str]] = []
+        for asset in release_data.get("assets", []):
+            name = asset.get("name", "")
+            dl_url = asset.get("browser_download_url", "")
+            name_lower = name.lower()
+            if name_lower.endswith(".exe"):
+                info.windows_installer_url = dl_url
+                info.windows_installer_name = name
+            elif name_lower.endswith(".zip") and "portable" in name_lower:
+                info.windows_portable_url = dl_url
+            elif name_lower.endswith(".sha256") or name_lower in ("sha256sums.txt", "checksums.txt", "sha256sum.txt"):
+                checksum_assets.append((name, dl_url))
+
+        # 1. Parse checksums from release notes (body)
+        if info.release_notes:
+            for line in info.release_notes.splitlines():
+                line = line.strip()
+                m = re.search(r"\b([a-fA-F0-9]{64})\b\s+\*?([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)", line)
+                if m:
+                    h, fn = m.groups()
+                    info.checksums[fn.strip().lower()] = h.strip().lower()
+                else:
+                    m2 = re.search(r"([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)\s*[:=]\s*\b([a-fA-F0-9]{64})\b", line)
+                    if m2:
+                        fn, h = m2.groups()
+                        info.checksums[fn.strip().lower()] = h.strip().lower()
+
+        # 2. Parse dedicated checksum asset files if present
+        for c_name, c_url in checksum_assets:
+            try:
+                req_c = urllib.request.Request(c_url, headers={"User-Agent": f"Komorebi-Desktop-Updater/{current_ver}"})
+                with urllib.request.urlopen(req_c, timeout=5) as c_resp:
+                    c_content = c_resp.read(65536).decode("utf-8", errors="ignore")
+                    if c_name.lower().endswith(".sha256") and not c_name.lower().startswith("sha256sums"):
+                        target_file = c_name[:-7]
+                        h_match = re.search(r"\b([a-fA-F0-9]{64})\b", c_content)
+                        if h_match:
+                            info.checksums[target_file.lower()] = h_match.group(1).lower()
+                    else:
+                        for line in c_content.splitlines():
+                            parts = line.strip().split()
+                            if len(parts) >= 2 and len(parts[0]) == 64:
+                                h = parts[0]
+                                fn = parts[1].lstrip("*")
+                                info.checksums[fn.lower()] = h.lower()
+            except Exception:
+                pass
+    else:
         # Fallback to tags if releases failed
         try:
             tags_url = f"{GITHUB_API_BASE}/tags"
@@ -213,74 +271,36 @@ def check_for_updates_sync(current_ver: str = __version__) -> UpdateInfo:
                 if tags and isinstance(tags, list):
                     first_tag = tags[0].get("name", "")
                     info.latest_version = first_tag
-                    info.has_update = is_newer_version(first_tag, current_ver)
                     info.tarball_url = tags[0].get("tarball_url", "")
                     info.html_url = f"https://github.com/{GITHUB_REPO}/releases/tag/{first_tag}"
                     info.release_name = f"Release {first_tag}"
-                    return info
-        except Exception:
-            pass
-        return info
-
-    tag = release_data.get("tag_name", "")
-    info.latest_version = tag
-    info.release_name = release_data.get("name") or f"Release {tag}"
-    info.release_notes = release_data.get("body") or ""
-    info.published_at = release_data.get("published_at", "")
-    info.html_url = release_data.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}"
-    info.tarball_url = release_data.get("tarball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.tar.gz"
-    info.zipball_url = release_data.get("zipball_url") or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
-
-    # Assets inspection & SHA256 discovery
-    checksum_assets: list[tuple[str, str]] = []
-    for asset in release_data.get("assets", []):
-        name = asset.get("name", "")
-        dl_url = asset.get("browser_download_url", "")
-        name_lower = name.lower()
-        if name_lower.endswith(".exe"):
-            info.windows_installer_url = dl_url
-            info.windows_installer_name = name
-        elif name_lower.endswith(".zip") and "portable" in name_lower:
-            info.windows_portable_url = dl_url
-        elif name_lower.endswith(".sha256") or name_lower in ("sha256sums.txt", "checksums.txt", "sha256sum.txt"):
-            checksum_assets.append((name, dl_url))
-
-    # 1. Parse checksums from release notes (body)
-    if info.release_notes:
-        for line in info.release_notes.splitlines():
-            line = line.strip()
-            m = re.search(r"\b([a-fA-F0-9]{64})\b\s+\*?([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)", line)
-            if m:
-                h, fn = m.groups()
-                info.checksums[fn.strip().lower()] = h.strip().lower()
-            else:
-                m2 = re.search(r"([a-zA-Z0-9_\-\.]+\.[a-zA-Z0-9]+)\s*[:=]\s*\b([a-fA-F0-9]{64})\b", line)
-                if m2:
-                    fn, h = m2.groups()
-                    info.checksums[fn.strip().lower()] = h.strip().lower()
-
-    # 2. Parse dedicated checksum asset files if present
-    for c_name, c_url in checksum_assets:
-        try:
-            req_c = urllib.request.Request(c_url, headers={"User-Agent": f"Komorebi-Desktop-Updater/{current_ver}"})
-            with urllib.request.urlopen(req_c, timeout=5) as c_resp:
-                c_content = c_resp.read(65536).decode("utf-8", errors="ignore")
-                if c_name.lower().endswith(".sha256") and not c_name.lower().startswith("sha256sums"):
-                    target_file = c_name[:-7]
-                    h_match = re.search(r"\b([a-fA-F0-9]{64})\b", c_content)
-                    if h_match:
-                        info.checksums[target_file.lower()] = h_match.group(1).lower()
-                else:
-                    for line in c_content.splitlines():
-                        parts = line.strip().split()
-                        if len(parts) >= 2 and len(parts[0]) == 64:
-                            h = parts[0]
-                            fn = parts[1].lstrip("*")
-                            info.checksums[fn.lower()] = h.lower()
         except Exception:
             pass
 
-    info.has_update = is_newer_version(tag, current_ver)
+    # 3. Also check main branch __version__ so pushing a version bump to main works without building a release
+    try:
+        raw_init_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/wallhaven/__init__.py"
+        req_main = urllib.request.Request(
+            raw_init_url,
+            headers={"User-Agent": f"Komorebi-Desktop-Updater/{current_ver}"},
+        )
+        with urllib.request.urlopen(req_main, timeout=6) as resp_main:
+            init_text = resp_main.read(16384).decode("utf-8", errors="ignore")
+            m_ver = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_text)
+            if m_ver:
+                main_ver = m_ver.group(1).strip()
+                best_known = info.latest_version or current_ver
+                if is_newer_version(main_ver, best_known):
+                    info.latest_version = f"v{main_ver.lstrip('vV')}"
+                    info.release_name = f"Komorebi Desktop {info.latest_version}"
+                    info.tarball_url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/main.tar.gz"
+                    info.zipball_url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/main.zip"
+                    info.html_url = f"https://github.com/{GITHUB_REPO}/commits/main"
+    except Exception:
+        pass
+
+    if info.latest_version:
+        info.has_update = is_newer_version(info.latest_version, current_ver)
     try:
         config.last_update_check = time.time()
     except Exception:
@@ -437,14 +457,20 @@ class UpdateApplyWorker(QThread):
 
     # ------------------------------------------------------------------ Windows
     def _update_windows(self):
-        """Downloads the Windows installer; it is launched after the user confirms restart."""
-        installer_url = self.info.windows_installer_url
-        if not installer_url:
-            self.apply_finished.emit(
-                False,
-                tr("updater_err_no_win_installer", url=self.info.html_url),
-            )
+        """Updates Windows installation in-place via live_app archive hot-swap (no .exe rebuild needed!)."""
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        base = Path(local_app_data) if local_app_data else (Path.home() / "AppData" / "Local")
+        live_app_dir = base / "KomorebiDesktop" / "live_app"
+        live_app_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self._update_from_archive(live_app_dir, install_deps=False)
             return
+        except Exception as live_err:
+            # Fallback to full .exe installer if available and live archive failed
+            installer_url = self.info.windows_installer_url
+            if not installer_url:
+                raise live_err
 
         out_name = self.info.windows_installer_name or "Komorebi-Desktop-Setup.exe"
         target_path = Path(tempfile.gettempdir()) / out_name
@@ -505,7 +531,7 @@ class UpdateApplyWorker(QThread):
         self.progress.emit(100, tr("updater_prog_done"))
         self.apply_finished.emit(True, tr("updater_success_git"))
 
-    def _update_from_archive(self, target_dir: Path):
+    def _update_from_archive(self, target_dir: Path, install_deps: bool = True):
         """Download release tarball, validate it, then swap files in with automatic rollback."""
         tag = self.info.latest_version
         archive_url = self.info.tarball_url or f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.tar.gz"
@@ -552,32 +578,34 @@ class UpdateApplyWorker(QThread):
                     tr("updater_err_archive_not_newer", archive_ver=archive_ver or '?', current=self.info.current_version)
                 )
 
-            # Install new Python dependencies BEFORE touching any app files,
-            # so a pip failure leaves the current installation fully intact.
-            venv_pip = target_dir / ".venv" / "bin" / "pip"
-            new_req = src_root / "requirements.txt"
-            if venv_pip.is_file() and new_req.is_file():
-                self.progress.emit(65, tr("updater_prog_deps"))
-                res = subprocess.run(
-                    [str(venv_pip), "install", "-r", str(new_req), "--quiet"],
-                    capture_output=True, text=True, timeout=600,
-                )
-                if res.returncode != 0:
-                    tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
-                    raise RuntimeError(tr("updater_err_deps_failed", tail=tail))
+            if install_deps:
+                # Install new Python dependencies BEFORE touching any app files,
+                # so a pip failure leaves the current installation fully intact.
+                venv_pip = target_dir / ".venv" / "bin" / "pip"
+                new_req = src_root / "requirements.txt"
+                if venv_pip.is_file() and new_req.is_file():
+                    self.progress.emit(65, tr("updater_prog_deps"))
+                    res = subprocess.run(
+                        [str(venv_pip), "install", "-r", str(new_req), "--quiet"],
+                        capture_output=True, text=True, timeout=600,
+                    )
+                    if res.returncode != 0:
+                        tail = "\n".join((res.stderr or res.stdout).strip().splitlines()[-5:])
+                        raise RuntimeError(tr("updater_err_deps_failed", tail=tail))
 
             self.progress.emit(80, tr("updater_prog_replace_files"))
             self._swap_in(src_root, target_dir)
 
-        self.progress.emit(92, tr("updater_prog_icons"))
-        try:
-            icon_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/256x256/apps"
-            src_icon = target_dir / "assets" / "icon.png"
-            if src_icon.exists() and icon_dir.exists():
-                for name in ("komorebi.png", "komorebi-desktop.png"):
-                    shutil.copy2(src_icon, icon_dir / name)
-        except Exception:
-            pass  # cosmetic only
+        if sys.platform != "win32":
+            self.progress.emit(92, tr("updater_prog_icons"))
+            try:
+                icon_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons/hicolor/256x256/apps"
+                src_icon = target_dir / "assets" / "icon.png"
+                if src_icon.exists() and icon_dir.exists():
+                    for name in ("komorebi.png", "komorebi-desktop.png"):
+                        shutil.copy2(src_icon, icon_dir / name)
+            except Exception:
+                pass  # cosmetic only
 
         self.progress.emit(100, tr("updater_prog_done"))
         self.apply_finished.emit(True, tr("updater_success_archive"))

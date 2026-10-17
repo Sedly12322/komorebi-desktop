@@ -42,3 +42,22 @@ def test_sha256_verification_mismatch():
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
+
+
+def test_universal_live_package_finder(tmp_path: Path):
+    import main as entry_main
+    live_root = tmp_path / "live_app"
+    pkg_dir = live_root / "wallhaven"
+    pkg_dir.mkdir(parents=True)
+    init_file = pkg_dir / "__init__.py"
+    init_file.write_text('__version__ = "9.9.9"\n', encoding="utf-8")
+
+    assert entry_main._read_init_version(init_file) == "9.9.9"
+    assert entry_main._parse_ver("9.9.9") > entry_main._parse_ver("2.0.3")
+
+    finder = entry_main._LivePackageFinder(live_root)
+    spec = finder.find_spec("wallhaven")
+    assert spec is not None
+    assert spec.origin is not None
+    assert Path(spec.origin).resolve() == init_file.resolve()
+    assert finder.find_spec("non_wallhaven_module") is None

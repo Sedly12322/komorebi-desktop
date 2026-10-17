@@ -13,6 +13,16 @@ from wallhaven.config import config
 
 
 def get_asset_path(filename: str) -> Path:
+    # 0. Check Universal Live-App override directory
+    live_dir = os.environ.get("KOMOREBI_LIVE_APP_DIR")
+    if live_dir:
+        live_asset = Path(live_dir) / "assets" / filename
+        if live_asset.exists():
+            return live_asset
+        live_direct = Path(live_dir) / filename
+        if live_direct.exists():
+            return live_direct
+
     # 1. Check PyInstaller bundle directory
     if hasattr(sys, "_MEIPASS"):
         bundle_asset = Path(sys._MEIPASS) / "assets" / filename

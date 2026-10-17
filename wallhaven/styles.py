@@ -35,7 +35,17 @@ def _tr_theme(key: str, default: str) -> str:
 
 
 def get_asset_path(filename: str) -> Path:
-    """Finds an asset across bundled environments, local paths, and system icon directories."""
+    """Finds an asset across live-update directory, bundled environments, local paths, and system icon directories."""
+    # 0. Universal Live-App override directory
+    live_dir = os.environ.get("KOMOREBI_LIVE_APP_DIR")
+    if live_dir:
+        l1 = Path(live_dir) / "assets" / filename
+        if l1.exists():
+            return l1
+        l2 = Path(live_dir) / filename
+        if l2.exists():
+            return l2
+
     # 1. PyInstaller bundle
     if hasattr(sys, "_MEIPASS"):
         b1 = Path(sys._MEIPASS) / "assets" / filename
