@@ -320,6 +320,7 @@ class UpdateCheckWorker(QObject):
 
     check_finished = pyqtSignal(object)  # UpdateInfo
     check_failed = pyqtSignal(str)
+    finished = pyqtSignal()
 
     def __init__(self, current_ver: str = __version__, parent=None):
         # ``parent`` is accepted for API compatibility but deliberately ignored.
@@ -353,6 +354,11 @@ class UpdateCheckWorker(QObject):
                 self._safe_emit(self.check_finished, info)
         except Exception as e:
             self._safe_emit(self.check_failed, str(e))
+        finally:
+            try:
+                self.finished.emit()
+            except RuntimeError:
+                pass
 
     @staticmethod
     def _safe_emit(signal, value):

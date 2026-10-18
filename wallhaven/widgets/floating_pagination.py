@@ -241,29 +241,34 @@ class FloatingPagination(QFrame):
 
         pal = get_palette(config.theme)
         bg = pal.get("bg_surface", "#12151f")
-        border = pal.get("border", "#283045")
+        bg_cap = pal.get("bg_capsule", "#0b0d14")
+        border = pal.get("border_hover", "#3b4461")
         accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
+        grad_start = pal.get("accent_gradient_start", accent)
+        grad_end = pal.get("accent_gradient_end", accent_hover)
+        accent_text = pal.get("accent_text", "#ffffff")
         text = pal.get("text_primary", "#f8fafc")
 
         self.setStyleSheet(f"""
             QFrame#floatingPagination {{
-                background-color: {bg};
-                border: 1px solid {border};
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {bg_cap}, stop:0.5 {bg}, stop:1 {bg_cap});
+                border: 1.5px solid {accent};
                 border-radius: 22px;
             }}
             QPushButton#paginationPillBtn {{
-                background-color: rgba(255, 255, 255, 0.05);
+                background-color: rgba(255, 255, 255, 0.07);
                 color: {text};
-                border: 1px solid rgba(255, 255, 255, 0.08);
+                border: 1px solid {border};
                 border-radius: 14px;
                 font-size: 14px;
-                font-weight: bold;
+                font-weight: 900;
                 padding: 0;
             }}
             QPushButton#paginationPillBtn:hover {{
-                background-color: {accent};
-                border-color: {accent};
-                color: #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {grad_start}, stop:1 {grad_end});
+                border-color: {accent_hover};
+                color: {accent_text};
             }}
             QPushButton#paginationPillBtn:disabled {{
                 background-color: transparent;
@@ -271,17 +276,17 @@ class FloatingPagination(QFrame):
                 border-color: transparent;
             }}
             QPushButton#paginationInfoBtn {{
-                background-color: transparent;
-                color: {text};
-                border: none;
-                border-radius: 12px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {grad_start}, stop:1 {grad_end});
+                color: {accent_text};
+                border: 1px solid {accent_hover};
+                border-radius: 13px;
                 font-size: 12px;
-                font-weight: 700;
-                padding: 0 10px;
+                font-weight: 800;
+                padding: 0 14px;
             }}
             QPushButton#paginationInfoBtn:hover {{
-                background-color: rgba(255, 255, 255, 0.06);
-                color: {accent};
+                background-color: {accent_hover};
+                border-color: #ffffff;
             }}
         """)
 

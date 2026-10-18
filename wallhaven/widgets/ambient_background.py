@@ -170,17 +170,17 @@ class KomorebiAmbientCanvas(QWidget):
         t = self._anim_time
 
         # 2. Top atmospheric light fade (Overhead soft glow)
-        top_glow_h = min(260.0, h * 0.40)
+        top_glow_h = min(280.0, h * 0.42)
         top_glow = QLinearGradient(0.0, 0.0, 0.0, top_glow_h)
-        top_alpha = 14 if is_oled else (12 if is_light else 26)
+        top_alpha = 22 if is_oled else (14 if is_light else 44)
         top_glow.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), top_alpha))
-        top_glow.setColorAt(0.45, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(top_alpha * 0.35)))
+        top_glow.setColorAt(0.45, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(top_alpha * 0.40)))
         top_glow.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
         painter.fillRect(QRectF(0.0, 0.0, w, top_glow_h), top_glow)
 
         # 3. Ambient Mesh Orbs (Gentle floating aurora with breathing pulse)
-        orb_alpha = 16 if is_oled else (18 if is_light else 34)
-        sec_alpha = 12 if is_oled else (14 if is_light else 26)
+        orb_alpha = 26 if is_oled else (20 if is_light else 52)
+        sec_alpha = 20 if is_oled else (16 if is_light else 42)
 
         # Breathing pulsation factor (~7 second cycle)
         breath1 = 0.85 + 0.15 * math.sin(t * 0.5)

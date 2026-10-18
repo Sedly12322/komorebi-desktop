@@ -21,6 +21,7 @@ from PyQt6.QtGui import (
     QColor,
     QPainterPath,
     QLinearGradient,
+    QRadialGradient,
     QFont,
     QPen,
     QCursor,
@@ -43,7 +44,7 @@ from wallhaven.styles import get_available_themes, apply_theme, get_palette, get
 
 
 class SidebarNavItem(QPushButton):
-    """Rich interactive navigation item with icon, title, subtitle, and optional count badge."""
+    """Rich interactive navigation item with 34x34 neon icon tile, title, subtitle, and optional count badge."""
 
     def __init__(
         self,
@@ -62,7 +63,7 @@ class SidebarNavItem(QPushButton):
         self.badge_text = badge_text
         self.is_active = False
 
-        self.setFixedHeight(50)
+        self.setFixedHeight(52)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -76,12 +77,13 @@ class SidebarNavItem(QPushButton):
 
     def _init_ui(self):
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 6, 12, 6)
+        layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(10)
 
-        # Icon
+        # 34x34 Rounded Icon Tile
         self.icon_lbl = QLabel(self.icon_str)
-        self.icon_lbl.setStyleSheet("font-size: 18px; background: transparent;")
+        self.icon_lbl.setFixedSize(34, 34)
+        self.icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         layout.addWidget(self.icon_lbl)
 
@@ -91,22 +93,10 @@ class SidebarNavItem(QPushButton):
         text_layout.setContentsMargins(0, 0, 0, 0)
 
         self.title_lbl = QLabel(self.title_text)
-        self.title_lbl.setStyleSheet("""
-            font-size: 12.5px;
-            font-weight: 700;
-            color: #cbd5e1;
-            background: transparent;
-        """)
         self.title_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         text_layout.addWidget(self.title_lbl)
 
         self.subtitle_lbl = QLabel(self.subtitle_text)
-        self.subtitle_lbl.setStyleSheet("""
-            font-size: 10px;
-            font-weight: 500;
-            color: #64748b;
-            background: transparent;
-        """)
         self.subtitle_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         text_layout.addWidget(self.subtitle_lbl)
 
@@ -114,14 +104,6 @@ class SidebarNavItem(QPushButton):
 
         # Optional Badge
         self.badge_lbl = QLabel(self.badge_text)
-        self.badge_lbl.setStyleSheet("""
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #94a3b8;
-            border-radius: 9px;
-            padding: 2px 7px;
-            font-size: 10px;
-            font-weight: 700;
-        """)
         self.badge_lbl.setVisible(bool(self.badge_text))
         self.badge_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         layout.addWidget(self.badge_lbl)
@@ -149,9 +131,18 @@ class SidebarNavItem(QPushButton):
         text_sec = pal.get("text_secondary", "#cbd5e1")
         text_mut = pal.get("text_muted", "#64748b")
         accent = pal.get("accent", "#6366f1")
+        accent_hover = pal.get("accent_hover", "#818cf8")
         accent_text = pal.get("accent_text", "#ffffff")
+        bg_cap = pal.get("bg_capsule", "#0b0d14")
+        border_col = pal.get("border", "#232838")
 
         if self.is_active:
+            self.icon_lbl.setStyleSheet("""
+                font-size: 17px;
+                background-color: rgba(255, 255, 255, 0.20);
+                border: 1px solid rgba(255, 255, 255, 0.40);
+                border-radius: 10px;
+            """)
             self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
                 font-weight: 800;
@@ -167,13 +158,19 @@ class SidebarNavItem(QPushButton):
             self.badge_lbl.setStyleSheet(f"""
                 background-color: rgba(255, 255, 255, 0.25);
                 color: {accent_text};
-                border: 1px solid rgba(255, 255, 255, 0.35);
+                border: 1px solid rgba(255, 255, 255, 0.42);
                 border-radius: 9px;
                 padding: 2px 7px;
-                font-size: 10px;
-                font-weight: 800;
+                font-size: 9.5px;
+                font-weight: 900;
             """)
         else:
+            self.icon_lbl.setStyleSheet(f"""
+                font-size: 16px;
+                background-color: {bg_cap};
+                border: 1px solid {border_col};
+                border-radius: 10px;
+            """)
             self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
                 font-weight: 700;
@@ -187,26 +184,26 @@ class SidebarNavItem(QPushButton):
                 background: transparent;
             """)
             self.badge_lbl.setStyleSheet(f"""
-                background-color: rgba(255, 255, 255, 0.08);
-                color: {accent};
-                border: 1px solid rgba(255, 255, 255, 0.12);
+                background-color: {bg_cap};
+                color: {accent_hover};
+                border: 1px solid {accent};
                 border-radius: 9px;
                 padding: 2px 7px;
-                font-size: 10px;
+                font-size: 9.5px;
                 font-weight: 800;
             """)
 
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                border-radius: 10px;
+        self.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.015);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 12px;
                 text-align: left;
-            }}
-            QPushButton:hover {{
-                background-color: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-            }}
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+            }
         """)
 
 
@@ -218,7 +215,7 @@ class SidebarNavContainer(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_mode = "wallhaven"
-        self._indicator_rect = QRect(6, 6, 208, 48)
+        self._indicator_rect = QRect(4, 6, 218, 52)
         self.buttons: dict[str, SidebarNavItem] = {}
 
         self._anim = QPropertyAnimation(self, b"indicatorRect")
@@ -229,17 +226,18 @@ class SidebarNavContainer(QWidget):
 
     def _init_layout(self):
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(6, 4, 6, 4)
-        self.main_layout.setSpacing(4)
+        self.main_layout.setContentsMargins(4, 4, 4, 4)
+        self.main_layout.setSpacing(6)
 
         # 1. Section Header: Feeds / Explore
         self.section_explore_lbl = QLabel(tr("nav_explore").upper() if tr("nav_explore") else "OBJEVOVAT")
         self.section_explore_lbl.setStyleSheet("""
-            color: #64748b;
+            color: #94a3b8;
             font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.4px;
-            padding: 8px 10px 4px 10px;
+            font-weight: 900;
+            letter-spacing: 1.6px;
+            padding: 6px 8px 2px 8px;
+            background: transparent;
         """)
         self.main_layout.addWidget(self.section_explore_lbl)
 
@@ -252,23 +250,23 @@ class SidebarNavContainer(QWidget):
         ]
 
         for mode_key, icon, title, subtitle, badge in explore_items:
-            # Map "osu!" to mode "osu"
             actual_mode = "osu" if mode_key == "osu!" else mode_key
             item = SidebarNavItem(actual_mode, icon, title, subtitle, badge, self)
             item.clicked.connect(lambda checked, m=actual_mode: self.select_mode(m, user_click=True))
             self.main_layout.addWidget(item)
             self.buttons[actual_mode] = item
 
-        self.main_layout.addSpacing(10)
+        self.main_layout.addSpacing(8)
 
         # 2. Section Header: Library
         self.section_lib_lbl = QLabel(tr("nav_library").upper() if tr("nav_library") else "LIBRARY")
         self.section_lib_lbl.setStyleSheet("""
-            color: #64748b;
+            color: #94a3b8;
             font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.4px;
-            padding: 8px 10px 4px 10px;
+            font-weight: 900;
+            letter-spacing: 1.6px;
+            padding: 6px 8px 2px 8px;
+            background: transparent;
         """)
         self.main_layout.addWidget(self.section_lib_lbl)
 
@@ -343,15 +341,15 @@ class SidebarNavContainer(QWidget):
             c_glow = QColor(pal.get("accent_hover", pal.get("accent", "#818cf8")))
 
             # Outer neon halo layers
-            for expand, alpha in ((4.0, 26), (2.0, 52)):
+            for expand, alpha in ((5.0, 32), (2.5, 68)):
                 halo_path = QPainterPath()
                 halo_path.addRoundedRect(
                     float(ir.x()) - expand,
                     float(ir.y()) - expand,
                     float(ir.width()) + expand * 2,
                     float(ir.height()) + expand * 2,
-                    12.0,
-                    12.0,
+                    13.0,
+                    13.0,
                 )
                 glow_col = QColor(c_glow)
                 glow_col.setAlpha(alpha)
@@ -363,12 +361,12 @@ class SidebarNavContainer(QWidget):
                 float(ir.y()),
                 float(ir.width()),
                 float(ir.height()),
-                10.0,
-                10.0,
+                12.0,
+                12.0,
             )
 
-            c_start.setAlpha(245)
-            c_end.setAlpha(245)
+            c_start.setAlpha(248)
+            c_end.setAlpha(248)
 
             grad = QLinearGradient(float(ir.x()), float(ir.y()), float(ir.x() + ir.width()), float(ir.y() + ir.height()))
             grad.setColorAt(0.0, c_start)
@@ -376,17 +374,17 @@ class SidebarNavContainer(QWidget):
             painter.fillPath(pill_path, grad)
 
             # Vivid neon edge highlight
-            sheen_color = QColor(c_glow).lighter(125)
-            sheen_color.setAlpha(185)
+            sheen_color = QColor(c_glow).lighter(130)
+            sheen_color.setAlpha(210)
             pen = QPen(sheen_color)
-            pen.setWidthF(1.5)
+            pen.setWidthF(1.6)
             painter.strokePath(pill_path, pen)
 
         painter.end()
 
 
 class KomorebiSidebar(QFrame):
-    """The ultra-modern left navigation sidebar for Komorebi Desktop."""
+    """The ultra-modern Gaming/Neon Command Center left sidebar for Komorebi Desktop."""
 
     mode_changed = pyqtSignal(str)
     theme_clicked = pyqtSignal()
@@ -397,32 +395,81 @@ class KomorebiSidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("komorebiSidebar")
-        self.setFixedWidth(248)
+        self.setFixedWidth(258)
 
         self._init_ui()
 
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        w = float(self.width())
+        h = float(self.height())
+        pal = get_palette(config.theme)
+
+        bg_surf = QColor(pal.get("bg_surface", "#12151f"))
+        bg_cap = QColor(pal.get("bg_capsule", "#0b0d14"))
+        accent = QColor(pal.get("accent", "#6366f1"))
+        accent_hover = QColor(pal.get("accent_hover", "#818cf8"))
+
+        # 1. Deep vertical cyber-glass gradient
+        bg_grad = QLinearGradient(0.0, 0.0, 0.0, h)
+        bg_grad.setColorAt(0.0, bg_surf.lighter(108))
+        bg_grad.setColorAt(0.5, bg_surf)
+        bg_grad.setColorAt(1.0, bg_cap)
+        painter.fillRect(self.rect(), bg_grad)
+
+        # 2. Top-left radial neon aura behind Hero Brand Card
+        rad = QRadialGradient(w * 0.35, 42.0, 160.0)
+        aura_col = QColor(accent)
+        aura_col.setAlpha(46)
+        rad.setColorAt(0.0, aura_col)
+        aura_mid = QColor(accent_hover)
+        aura_mid.setAlpha(18)
+        rad.setColorAt(0.55, aura_mid)
+        rad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.fillRect(self.rect(), rad)
+
+        # 3. Glowing vertical neon accent edge line along the right border
+        edge_grad = QLinearGradient(0.0, 0.0, 0.0, h)
+        c_top = QColor(accent_hover)
+        c_top.setAlpha(180)
+        c_mid = QColor(accent)
+        c_mid.setAlpha(110)
+        c_bot = QColor(accent)
+        c_bot.setAlpha(40)
+        edge_grad.setColorAt(0.0, c_top)
+        edge_grad.setColorAt(0.5, c_mid)
+        edge_grad.setColorAt(1.0, c_bot)
+        pen = QPen(edge_grad, 1.8)
+        painter.setPen(pen)
+        painter.drawLine(int(w) - 1, 0, int(w) - 1, int(h))
+
+        painter.end()
+
     def _init_ui(self):
         sidebar_layout = QVBoxLayout(self)
-        sidebar_layout.setContentsMargins(10, 14, 10, 14)
+        sidebar_layout.setContentsMargins(12, 12, 12, 12)
         sidebar_layout.setSpacing(10)
 
-        # 1. Top Brand Logo & App Emblem
-        brand_container = QWidget()
-        brand_layout = QHBoxLayout(brand_container)
-        brand_layout.setContentsMargins(8, 6, 8, 10)
+        # 1. Hero Brand Card at Top
+        self.brand_card = QFrame()
+        self.brand_card.setObjectName("sidebarBrandCard")
+        brand_layout = QHBoxLayout(self.brand_card)
+        brand_layout.setContentsMargins(10, 10, 10, 10)
         brand_layout.setSpacing(10)
 
         # Glowing emblem icon using official app emblem asset
         emblem_lbl = QLabel()
-        emblem_lbl.setFixedSize(36, 36)
+        emblem_lbl.setFixedSize(40, 40)
         emblem_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         emblem_path = get_asset_path("icon_emblem.png")
         if not emblem_path.exists():
             emblem_path = get_asset_path("icon.png")
         if emblem_path.exists():
             pm = QPixmap(str(emblem_path)).scaled(
-                28,
-                28,
+                30,
+                30,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -431,41 +478,43 @@ class KomorebiSidebar(QFrame):
             emblem_lbl.setText("🌿")
 
         emblem_lbl.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(234, 179, 8, 0.15), stop:1 rgba(99, 102, 241, 0.2));
-            border: 1px solid rgba(234, 179, 8, 0.35);
-            border-radius: 10px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(99, 102, 241, 0.28), stop:1 rgba(236, 72, 153, 0.25));
+            border: 1.5px solid rgba(129, 140, 248, 0.55);
+            border-radius: 11px;
             padding: 3px;
         """)
         brand_layout.addWidget(emblem_lbl)
 
         # Brand title & version badge
         title_box = QVBoxLayout()
-        title_box.setSpacing(1)
+        title_box.setSpacing(2)
 
         brand_title = QLabel("KOMOREBI")
         brand_title.setStyleSheet("""
-            font-size: 14px;
+            font-size: 14.5px;
             font-weight: 900;
-            color: #f8fafc;
-            letter-spacing: 2px;
+            color: #ffffff;
+            letter-spacing: 2.2px;
+            background: transparent;
         """)
         title_box.addWidget(brand_title)
 
         subtitle_row = QHBoxLayout()
-        subtitle_row.setSpacing(4)
-        brand_sub = QLabel("Wallpapers & PFPs")
-        brand_sub.setStyleSheet("font-size: 9.5px; color: #64748b; font-weight: 600;")
+        subtitle_row.setSpacing(5)
+        brand_sub = QLabel("NEON HUB")
+        brand_sub.setStyleSheet("font-size: 9.5px; color: #94a3b8; font-weight: 800; letter-spacing: 0.8px; background: transparent;")
         subtitle_row.addWidget(brand_sub)
 
         self.ver_badge = QLabel(f"v{__version__}")
         self.ver_badge.setCursor(Qt.CursorShape.PointingHandCursor)
         self.ver_badge.setStyleSheet("""
-            background: rgba(99, 102, 241, 0.2);
-            color: #a5b4fc;
-            border-radius: 4px;
-            padding: 1px 5px;
-            font-size: 8.5px;
-            font-weight: 800;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            border-radius: 5px;
+            padding: 1px 6px;
+            font-size: 9px;
+            font-weight: 900;
         """)
         self.ver_badge.setToolTip(tr("update_badge_tip"))
         self.ver_badge.mousePressEvent = lambda e: self.update_clicked.emit()
@@ -474,29 +523,19 @@ class KomorebiSidebar(QFrame):
         title_box.addLayout(subtitle_row)
 
         brand_layout.addLayout(title_box, 1)
-        sidebar_layout.addWidget(brand_container)
-
-        # Divider line
-        div = QFrame()
-        div.setFrameShape(QFrame.Shape.HLine)
-        div.setStyleSheet("background-color: rgba(255, 255, 255, 0.05); max-height: 1px;")
-        sidebar_layout.addWidget(div)
+        sidebar_layout.addWidget(self.brand_card)
 
         # 2. Central Navigation Container with Sliding Pill
         self.nav_container = SidebarNavContainer(self)
         self.nav_container.item_selected.connect(self._on_item_selected)
         sidebar_layout.addWidget(self.nav_container, 1)
 
-        # Divider line
-        div2 = QFrame()
-        div2.setFrameShape(QFrame.Shape.HLine)
-        div2.setStyleSheet("background-color: rgba(255, 255, 255, 0.05); max-height: 1px;")
-        sidebar_layout.addWidget(div2)
-
-        # 3. Bottom Utility Section
-        bottom_box = QVBoxLayout()
-        bottom_box.setSpacing(4)
-        bottom_box.setContentsMargins(4, 2, 4, 2)
+        # 3. Bottom Utility Deck (Frosted Glass Dock)
+        self.utility_deck = QFrame()
+        self.utility_deck.setObjectName("sidebarUtilityDeck")
+        bottom_box = QVBoxLayout(self.utility_deck)
+        bottom_box.setSpacing(5)
+        bottom_box.setContentsMargins(8, 8, 8, 8)
 
         # Quick Theme Button
         self.theme_btn = QPushButton(f"🎨  {tr('theme_menu_title')}")
@@ -526,7 +565,7 @@ class KomorebiSidebar(QFrame):
         self.settings_btn.clicked.connect(self.settings_clicked.emit)
         bottom_box.addWidget(self.settings_btn)
 
-        sidebar_layout.addLayout(bottom_box)
+        sidebar_layout.addWidget(self.utility_deck)
 
         # Retranslate labels
         self.retranslate_ui()
@@ -552,10 +591,11 @@ class KomorebiSidebar(QFrame):
             self.ver_badge.setStyleSheet("""
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #06b6d4);
                 color: #ffffff;
-                border-radius: 4px;
+                border: 1px solid rgba(255, 255, 255, 0.35);
+                border-radius: 5px;
                 padding: 1px 6px;
-                font-size: 8.5px;
-                font-weight: 800;
+                font-size: 9px;
+                font-weight: 900;
             """)
             self.ver_badge.setToolTip(tr("update_badge_available_tip", version=new_version))
 
@@ -568,17 +608,18 @@ class KomorebiSidebar(QFrame):
             self.auto_wall_btn.setText(f"🖼️  {tr('auto_wall_on')}")
             self.auto_wall_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: rgba(16, 185, 129, 0.12);
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(5, 150, 105, 0.28), stop:1 rgba(16, 185, 129, 0.16));
                     color: #34d399;
-                    border: none;
-                    border-radius: 8px;
+                    border: 1px solid rgba(52, 211, 153, 0.5);
+                    border-radius: 9px;
                     text-align: left;
                     padding-left: 10px;
                     font-size: 11.5px;
-                    font-weight: 700;
+                    font-weight: 800;
                 }
                 QPushButton:hover {
-                    background-color: rgba(16, 185, 129, 0.22);
+                    background-color: rgba(16, 185, 129, 0.32);
+                    border-color: #34d399;
                 }
             """)
         else:
@@ -587,15 +628,16 @@ class KomorebiSidebar(QFrame):
                 QPushButton {
                     background-color: transparent;
                     color: #94a3b8;
-                    border: none;
-                    border-radius: 8px;
+                    border: 1px solid transparent;
+                    border-radius: 9px;
                     text-align: left;
                     padding-left: 10px;
                     font-size: 11.5px;
-                    font-weight: 600;
+                    font-weight: 700;
                 }
                 QPushButton:hover {
-                    background-color: rgba(255, 255, 255, 0.04);
+                    background-color: rgba(255, 255, 255, 0.06);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
                     color: #f1f5f9;
                 }
             """)
@@ -626,6 +668,7 @@ class KomorebiSidebar(QFrame):
             btn._update_style()
         self._update_auto_wall_btn_style()
         self.nav_container.update()
+        self.update()
 
     def retranslate_ui(self):
         if hasattr(self, "nav_container"):

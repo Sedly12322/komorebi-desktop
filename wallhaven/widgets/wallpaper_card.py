@@ -297,11 +297,33 @@ class WallpaperCard(QFrame):
 
         info_row.addStretch()
 
-        # Favorites count
+        # Mini color palette dots (up to 3 colors from item.colors)
+        colors = getattr(self.item, "colors", None) or []
+        if colors:
+            dots_wrap = QHBoxLayout()
+            dots_wrap.setContentsMargins(0, 0, 2, 0)
+            dots_wrap.setSpacing(3)
+            for hex_c in colors[:3]:
+                c_str = hex_c if str(hex_c).startswith("#") else f"#{hex_c}"
+                dot = QLabel()
+                dot.setFixedSize(8, 8)
+                dot.setStyleSheet(f"""
+                    background-color: {c_str};
+                    border: 1px solid rgba(255, 255, 255, 0.35);
+                    border-radius: 4px;
+                """)
+                dots_wrap.addWidget(dot)
+            info_row.addLayout(dots_wrap)
+
+        # Favorites or Views count
         if self.item.favorites > 0:
             fav_lbl = QLabel(f"★ {self.item.favorites:,}")
-            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 800;")
+            fav_lbl.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 800; background: transparent;")
             info_row.addWidget(fav_lbl)
+        elif getattr(self.item, "views", 0) > 0:
+            v_lbl = QLabel(f"👁 {self.item.views:,}")
+            v_lbl.setStyleSheet("color: #38bdf8; font-size: 10.5px; font-weight: 700; background: transparent;")
+            info_row.addWidget(v_lbl)
 
         card_layout.addLayout(info_row)
 
@@ -341,21 +363,30 @@ class WallpaperCard(QFrame):
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pal = get_palette(config.theme)
+        c1 = QColor(pal.get("accent_gradient_start", pal.get("accent", "#6366f1")))
+        c2 = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#a855f7")))
+
         if self._hovered:
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            pal = get_palette(config.theme)
-            c1 = QColor(pal.get("accent", "#6366f1"))
-            c2 = QColor(pal.get("accent_hover", "#a855f7"))
-            rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
-            path = QPainterPath()
-            path.addRoundedRect(rect, 13.0, 13.0)
-            grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
-            grad.setColorAt(0.0, c1)
-            grad.setColorAt(1.0, c2)
-            pen = QPen(grad, 2.2)
-            painter.strokePath(path, pen)
-            painter.end()
+            c1.setAlpha(255)
+            c2.setAlpha(255)
+            pen_w = 2.5
+        else:
+            c1.setAlpha(115)
+            c2.setAlpha(95)
+            pen_w = 1.5
+
+        rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
+        path = QPainterPath()
+        path.addRoundedRect(rect, 14.0, 14.0)
+        grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
+        grad.setColorAt(0.0, c1)
+        grad.setColorAt(1.0, c2)
+        pen = QPen(grad, pen_w)
+        painter.strokePath(path, pen)
+        painter.end()
 
     def enterEvent(self, event):
         super().enterEvent(event)

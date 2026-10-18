@@ -234,9 +234,10 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(5000, cache.clean_old_cache_if_needed)
 
     def _start_worker(self, worker: QThread):
-        """Starts a QThread and retains a reference until it finishes so Python GC never destroys a running thread."""
+        """Starts a QThread/worker and retains a reference until it finishes so Python GC never destroys a running thread."""
         self._running_workers.add(worker)
-        worker.finished.connect(lambda w=worker: self._running_workers.discard(w))
+        if hasattr(worker, "finished"):
+            worker.finished.connect(lambda w=worker: self._running_workers.discard(w))
         worker.start()
 
     def _init_ui(self):
@@ -285,15 +286,17 @@ class MainWindow(QMainWindow):
         self.banner_container.setVisible(False)
         self.canvas_vlayout.addWidget(self.banner_container)
 
-        # 2B. Spotlight Search Bar (at the top of canvas)
+        # 2B. Floating Neon Glass Spotlight Command Bar (at the top of canvas)
         self.spotlight_bar = QFrame()
         self.spotlight_bar.setObjectName("spotlightBar")
         s_layout = QHBoxLayout(self.spotlight_bar)
-        s_layout.setContentsMargins(18, 10, 18, 10)
-        s_layout.setSpacing(10)
+        s_layout.setContentsMargins(16, 10, 16, 10)
+        s_layout.setSpacing(12)
 
-        search_icon = QLabel("🔍")
-        search_icon.setStyleSheet("font-size: 15px; color: #64748b; background: transparent;")
+        search_icon = QLabel("⚡")
+        search_icon.setObjectName("spotlightIconBadge")
+        search_icon.setFixedSize(34, 34)
+        search_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         s_layout.addWidget(search_icon)
 
         self.search_input = QLineEdit()
@@ -309,17 +312,8 @@ class MainWindow(QMainWindow):
         self.shortcut_search_slash = QShortcut(QKeySequence("/"), self)
         self.shortcut_search_slash.activated.connect(self._focus_search)
 
-        self.shortcut_badge = QLabel("Ctrl+K")
-        self.shortcut_badge.setStyleSheet("""
-            background: rgba(255, 255, 255, 0.06);
-            color: #94a3b8;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 3px 8px;
-            font-size: 11px;
-            font-weight: 700;
-            font-family: monospace;
-        """)
+        self.shortcut_badge = QLabel("⌘ Ctrl+K")
+        self.shortcut_badge.setObjectName("shortcutKeyBadge")
         s_layout.addWidget(self.shortcut_badge)
 
         # Card Size Switcher Capsule (Compact / Normal / Large)
@@ -358,8 +352,8 @@ class MainWindow(QMainWindow):
         self.wallhaven_filter_bar = QFrame()
         self.wallhaven_filter_bar.setObjectName("filterPanel")
         f_layout = QHBoxLayout(self.wallhaven_filter_bar)
-        f_layout.setContentsMargins(14, 5, 14, 5)
-        f_layout.setSpacing(5)
+        f_layout.setContentsMargins(14, 7, 14, 7)
+        f_layout.setSpacing(6)
 
         # Category Chips
         self.cat_lbl = QLabel()

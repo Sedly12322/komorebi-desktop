@@ -239,21 +239,30 @@ class PfpCard(QFrame):
 
     def paintEvent(self, event):
         super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pal = get_palette(config.theme)
+        c1 = QColor(pal.get("accent_gradient_start", pal.get("accent", "#6366f1")))
+        c2 = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#ec4899")))
+
         if self._hovered:
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            pal = get_palette(config.theme)
-            c1 = QColor(pal.get("accent", "#6366f1"))
-            c2 = QColor(pal.get("accent_hover", "#ec4899"))
-            rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
-            path = QPainterPath()
-            path.addRoundedRect(rect, 13.0, 13.0)
-            grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
-            grad.setColorAt(0.0, c1)
-            grad.setColorAt(1.0, c2)
-            pen = QPen(grad, 2.2)
-            painter.strokePath(path, pen)
-            painter.end()
+            c1.setAlpha(255)
+            c2.setAlpha(255)
+            pen_w = 2.5
+        else:
+            c1.setAlpha(115)
+            c2.setAlpha(95)
+            pen_w = 1.5
+
+        rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
+        path = QPainterPath()
+        path.addRoundedRect(rect, 14.0, 14.0)
+        grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
+        grad.setColorAt(0.0, c1)
+        grad.setColorAt(1.0, c2)
+        pen = QPen(grad, pen_w)
+        painter.strokePath(path, pen)
+        painter.end()
 
     def enterEvent(self, event):
         super().enterEvent(event)

@@ -57,6 +57,16 @@ def main():
     # Handle Ctrl+C gracefully
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+    # Prevent unhandled Python exceptions in Qt slots from triggering qFatal() / SIGABRT crashes
+    def _safe_excepthook(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        import traceback
+        traceback.print_exception(exc_type, exc_value, exc_tb, file=sys.stderr)
+
+    sys.excepthook = _safe_excepthook
+
     # Windows taskbar grouping & Qt plugin setup
     if sys.platform == "win32":
         # Remove any lingering or inherited Linux QPA platform settings on Windows

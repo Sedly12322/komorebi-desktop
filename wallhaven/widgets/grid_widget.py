@@ -110,22 +110,8 @@ class WallpaperGridWidget(QWidget):
             card.update()
 
     def _trigger_entrance_animation(self):
-        if not self.cards:
-            return
-        try:
-            effect = QGraphicsOpacityEffect(self)
-            self.setGraphicsEffect(effect)
-            anim = QPropertyAnimation(effect, b"opacity", self)
-            anim.setDuration(180)
-            anim.setStartValue(0.25)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-            # Remove parent graphics effect once done so child card neon shadows render at full fidelity
-            anim.finished.connect(lambda: self.setGraphicsEffect(None))
-            self._entrance_anim = anim
-            anim.start()
-        except Exception:
-            self.setGraphicsEffect(None)
+        # Individual ShimmerLabels handle smooth 180ms alpha fade-in per card without conflicting with child QGraphicsDropShadowEffects
+        return
 
     def set_items(self, items: list[WallpaperItem]):
         self.clear()
@@ -147,7 +133,6 @@ class WallpaperGridWidget(QWidget):
             self.cards.append(card)
 
         self._relayout()
-        self._trigger_entrance_animation()
 
     def set_pfp_items(self, items: list[PfpItem]):
         self.clear()
@@ -169,12 +154,8 @@ class WallpaperGridWidget(QWidget):
             self.cards.append(card)
 
         self._relayout()
-        self._trigger_entrance_animation()
 
     def clear(self):
-        if self._entrance_anim and self._entrance_anim.state() == QPropertyAnimation.State.Running:
-            self._entrance_anim.stop()
-        self.setGraphicsEffect(None)
         self.grid_layout.removeWidget(self.empty_state_frame)
         self.empty_state_frame.setVisible(False)
         for card in self.cards:
