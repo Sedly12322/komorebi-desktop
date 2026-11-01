@@ -50,7 +50,7 @@ from wallhaven.updater import UpdateCheckWorker, UpdateDialog, UpdateBanner, Upd
 
 
 class PfpActionWorker(QThread):
-    finished = pyqtSignal(bool, str, PfpItem, str)  # ok, msg_or_path, item, action ("download" | "avatar")
+    finished = pyqtSignal(bool, str, PfpItem, str)  # ok, msg_or_path, item, action ("download" | "avatar" | "copy")
 
     def __init__(self, item: PfpItem, action: str):
         super().__init__()
@@ -61,6 +61,8 @@ class PfpActionWorker(QThread):
         try:
             if self.action == "download":
                 ok, res = pfps_client.download_pfp(self.item)
+            elif self.action == "copy":
+                ok, res = pfps_client.ensure_cached_pfp(self.item)
             else:
                 ok, res = pfps_client.set_system_avatar(self.item)
             self.finished.emit(ok, res, self.item, self.action)
@@ -1298,7 +1300,7 @@ class MainWindow(QMainWindow):
         elif self.current_mode == "moewalls":
             self.total_count_lbl.setText(tr("moe_total_found", total=f"{result.total:,}"))
         elif self.current_mode == "installed":
-            stats = installed_manager.get_stats()
+            stats = installed_manager.get_stats(rescan=False)
             self.total_count_lbl.setText(tr("installed_total_found", total=f"{result.total:,}", size=stats["human_size"]))
             self.inst_stats_lbl.setText(f"💾 {stats['human_size']}")
         else:
@@ -1535,6 +1537,13 @@ class MainWindow(QMainWindow):
         self._start_worker(worker)
 
     def _on_pfp_action_finished(self, ok: bool, res: str, item: PfpItem, action: str):
+        if action == "copy":
+            if ok and os.path.exists(res):
+                from PyQt6.QtGui import QPixmap
+                pm = QPixmap(res)
+                if not pm.isNull():
+                    pfps_client.copy_image_to_clipboard(pm)
+            return
         if action == "download":
             if ok:
                 self.status_bar.showMessage(tr("pfp_saved_status", path=res), 8000)
@@ -1564,6 +1573,11 @@ class MainWindow(QMainWindow):
                 )
 
     def _on_pfp_copy(self, item: PfpItem):
+        full_cache = pfps_client._cache_dir / item.filename
+        if not (full_cache.exists() and full_cache.stat().st_size > 0):
+            worker = PfpActionWorker(item, "copy")
+            worker.finished.connect(self._on_pfp_action_finished)
+            self._start_worker(worker)
         self.status_bar.showMessage(tr("pfp_copied_status", title=item.title), 6000)
         if hasattr(self, "toast"):
             self.toast.show_message(tr("toast_pfp_copied", title=item.title), icon="📋")

@@ -64,6 +64,7 @@ DEFAULT_CONFIG = {
     "theme": get_default_theme(),
     "auto_set_wallpaper": False,
     "wallpaper_setter": "auto",
+    "wallpaper_monitor": "all",
     "custom_wallpaper_cmd": "",
     "custom_video_wallpaper_cmd": "",
     "moewalls_category": "all",
@@ -144,6 +145,16 @@ class Config:
     @wallpaper_setter.setter
     def wallpaper_setter(self, val: str):
         self.set("wallpaper_setter", str(val).strip())
+
+    @property
+    def wallpaper_monitor(self) -> str:
+        val = str(self._config.get("wallpaper_monitor", "all")).strip()
+        return val if val else "all"
+
+    @wallpaper_monitor.setter
+    def wallpaper_monitor(self, val: str):
+        v = str(val).strip()
+        self.set("wallpaper_monitor", v if v else "all")
 
     @property
     def custom_wallpaper_cmd(self) -> str:

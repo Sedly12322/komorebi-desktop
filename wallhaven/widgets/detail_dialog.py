@@ -1,8 +1,8 @@
 import os
 import sys
 from pathlib import Path
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl
-from PyQt6.QtGui import QPixmap, QDesktopServices, QColor
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QUrl, QPointF, QRectF
+from PyQt6.QtGui import QPixmap, QDesktopServices, QColor, QPainter
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -17,12 +17,13 @@ from PyQt6.QtWidgets import (
     QFrame,
     QMessageBox,
     QCheckBox,
+    QComboBox,
     QStackedWidget,
 )
 from wallhaven.api import WallpaperItem, api
 from wallhaven.config import config
 from wallhaven.image_loader import loader
-from wallhaven.wallpaper import set_desktop_wallpaper
+from wallhaven.wallpaper import get_available_monitors, set_desktop_wallpaper
 from wallhaven.i18n import tr, i18n
 from wallhaven.styles import get_palette
 
@@ -99,6 +100,204 @@ class DownloadWorker(QThread):
             self.failed.emit(str(e))
 
 
+class ZoomablePreviewWidget(QLabel):
+    """Interactive image preview canvas supporting smooth wheel zoom (1x-8x), click-drag pan, and double-click toggle."""
+
+    zoom_changed = pyqtSignal(float)
+    MIN_ZOOM = 1.0
+    MAX_ZOOM = 8.0
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self._source_pixmap: QPixmap | None = None
+        self._zoom: float = 1.0
+        self._pan: QPointF = QPointF(0.0, 0.0)
+        self._dragging: bool = False
+        self._last_mouse_pos: QPointF = QPointF()
+        self.setMouseTracking(True)
+
+    @property
+    def zoom_factor(self) -> float:
+        return self._zoom
+
+    def pixmap(self) -> QPixmap:
+        if self._source_pixmap is not None:
+            return self._source_pixmap
+        return super().pixmap()
+
+    def setPixmap(self, pixmap: QPixmap):
+        self.set_source_pixmap(pixmap, preserve_zoom=False)
+
+    def setText(self, text: str):
+        if text:
+            self._source_pixmap = None
+            self._zoom = 1.0
+            self._pan = QPointF(0.0, 0.0)
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.zoom_changed.emit(self._zoom)
+        super().setText(text)
+        self.update()
+
+    def set_source_pixmap(self, pixmap: QPixmap | None, preserve_zoom: bool = False):
+        if pixmap is not None and not pixmap.isNull():
+            super().setText("")
+            self._source_pixmap = pixmap
+            if not preserve_zoom:
+                self._zoom = 1.0
+                self._pan = QPointF(0.0, 0.0)
+                self.zoom_changed.emit(self._zoom)
+            else:
+                self._clamp_pan()
+        else:
+            self._source_pixmap = None
+            self._zoom = 1.0
+            self._pan = QPointF(0.0, 0.0)
+            self.zoom_changed.emit(self._zoom)
+        self._update_cursor()
+        self.update()
+
+    def _base_fit_size(self) -> tuple[float, float]:
+        if self._source_pixmap is None or self._source_pixmap.isNull():
+            return 0.0, 0.0
+        pw = float(self._source_pixmap.width())
+        ph = float(self._source_pixmap.height())
+        if pw <= 0 or ph <= 0:
+            return 0.0, 0.0
+        ww = float(max(1, self.width()))
+        wh = float(max(1, self.height()))
+        scale = min(ww / pw, wh / ph)
+        return pw * scale, ph * scale
+
+    def _clamp_pan(self):
+        fit_w, fit_h = self._base_fit_size()
+        if fit_w <= 0 or fit_h <= 0 or self._zoom <= 1.001:
+            self._pan = QPointF(0.0, 0.0)
+            return
+        dw = fit_w * self._zoom
+        dh = fit_h * self._zoom
+        max_x = max(0.0, (dw - self.width()) / 2.0)
+        max_y = max(0.0, (dh - self.height()) / 2.0)
+        clamped_x = max(-max_x, min(max_x, self._pan.x()))
+        clamped_y = max(-max_y, min(max_y, self._pan.y()))
+        self._pan = QPointF(clamped_x, clamped_y)
+
+    def _update_cursor(self):
+        if self._source_pixmap is None or self._zoom <= 1.001:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        elif self._dragging:
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        else:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+    def set_zoom(self, new_zoom: float, anchor: QPointF | None = None):
+        if self._source_pixmap is None or self._source_pixmap.isNull():
+            return
+        clamped = max(self.MIN_ZOOM, min(self.MAX_ZOOM, float(new_zoom)))
+        if clamped <= 1.005:
+            clamped = 1.0
+        old_zoom = self._zoom
+        if abs(clamped - old_zoom) < 1e-4 and clamped != 1.0:
+            return
+
+        if anchor is not None and old_zoom > 0 and clamped > 1.0:
+            center = QPointF(self.width() / 2.0, self.height() / 2.0)
+            rel = anchor - center - self._pan
+            ratio = clamped / old_zoom
+            self._pan = anchor - center - rel * ratio
+        elif clamped == 1.0:
+            self._pan = QPointF(0.0, 0.0)
+
+        self._zoom = clamped
+        self._clamp_pan()
+        self._update_cursor()
+        self.zoom_changed.emit(self._zoom)
+        self.update()
+
+    def zoom_in(self):
+        self.set_zoom(self._zoom * 1.25)
+
+    def zoom_out(self):
+        self.set_zoom(self._zoom / 1.25)
+
+    def reset_zoom(self):
+        self.set_zoom(1.0)
+
+    def wheelEvent(self, event):
+        if self._source_pixmap is not None and not self._source_pixmap.isNull():
+            delta = event.angleDelta().y()
+            if delta != 0:
+                factor = 1.18 if delta > 0 else (1.0 / 1.18)
+                self.set_zoom(self._zoom * factor, anchor=event.position())
+                event.accept()
+                return
+        super().wheelEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._source_pixmap is not None and self._zoom > 1.001:
+            self._dragging = True
+            self._last_mouse_pos = event.position()
+            self._update_cursor()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging and self._source_pixmap is not None:
+            delta = event.position() - self._last_mouse_pos
+            self._last_mouse_pos = event.position()
+            self._pan = QPointF(self._pan.x() + delta.x(), self._pan.y() + delta.y())
+            self._clamp_pan()
+            self.update()
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            self._update_cursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._source_pixmap is not None:
+            if self._zoom > 1.05:
+                self.reset_zoom()
+            else:
+                self.set_zoom(2.5, anchor=event.position())
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._clamp_pan()
+
+    def paintEvent(self, event):
+        if self._source_pixmap is None or self._source_pixmap.isNull():
+            super().paintEvent(event)
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+
+        fit_w, fit_h = self._base_fit_size()
+        if fit_w <= 0 or fit_h <= 0:
+            painter.end()
+            return
+
+        dw = fit_w * self._zoom
+        dh = fit_h * self._zoom
+        cx = (self.width() - dw) / 2.0 + self._pan.x()
+        cy = (self.height() - dh) / 2.0 + self._pan.y()
+        target_rect = QRectF(cx, cy, dw, dh)
+        source_rect = QRectF(0.0, 0.0, float(self._source_pixmap.width()), float(self._source_pixmap.height()))
+        painter.drawPixmap(target_rect, self._source_pixmap, source_rect)
+        painter.end()
+
+
 class DetailDialog(QDialog):
     tag_clicked = pyqtSignal(str)
     color_clicked = pyqtSignal(str)
@@ -122,6 +321,10 @@ class DetailDialog(QDialog):
         self.fetch_worker: DetailFetchWorker | None = None
         self.saved_path: str = ""
         self._current_pixmap: QPixmap | None = None
+        self._preview_url: str | None = None
+        self._full_preview_url: str | None = None
+        self._is_full_res_loaded: bool = False
+        self._is_fullscreen_preview: bool = False
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
 
@@ -169,28 +372,28 @@ class DetailDialog(QDialog):
         text_pri = pal.get("text_primary", "#f8fafc")
         text_sec = pal.get("text_secondary", "#94a3b8")
 
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(16)
+        self.main_layout = QHBoxLayout(self)
+        self.main_layout.setContentsMargins(16, 16, 16, 16)
+        self.main_layout.setSpacing(16)
 
         # Left: Large Preview Container with StackedWidget (Index 0: Image, Index 1: Video)
-        preview_container = QFrame()
-        preview_container.setObjectName("previewContainer")
-        preview_container.setStyleSheet(f"""
+        self.preview_container = QFrame()
+        self.preview_container.setObjectName("previewContainer")
+        self.preview_container.setStyleSheet(f"""
             QFrame#previewContainer {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {pal.get('bg_base', '#090b10')}, stop:1 {bg_card});
                 border: 1.5px solid {border};
                 border-radius: 14px;
             }}
         """)
-        preview_layout = QVBoxLayout(preview_container)
+        preview_layout = QVBoxLayout(self.preview_container)
         preview_layout.setContentsMargins(8, 8, 8, 8)
         preview_layout.setSpacing(6)
 
-        # Top navigation bar inside preview container (Prev / Counter / Next)
+        # Top navigation & zoom/fullscreen bar inside preview container
         nav_bar = QHBoxLayout()
         nav_bar.setContentsMargins(6, 2, 6, 2)
-        nav_bar.setSpacing(8)
+        nav_bar.setSpacing(6)
 
         nav_btn_style = f"""
             QPushButton {{
@@ -198,7 +401,7 @@ class DetailDialog(QDialog):
                 color: {text_pri};
                 border: 1px solid {border};
                 border-radius: 8px;
-                padding: 4px 12px;
+                padding: 4px 10px;
                 font-size: 12px;
                 font-weight: 800;
             }}
@@ -223,8 +426,8 @@ class DetailDialog(QDialog):
 
         self.nav_counter_lbl = QLabel("")
         self.nav_counter_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.nav_counter_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11.5px; font-weight: 700; background: transparent;")
-        nav_bar.addWidget(self.nav_counter_lbl, stretch=1)
+        self.nav_counter_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11.5px; font-weight: 700; background: transparent; padding: 0 4px;")
+        nav_bar.addWidget(self.nav_counter_lbl)
 
         self.next_item_btn = QPushButton("▶")
         self.next_item_btn.setFixedHeight(28)
@@ -234,16 +437,66 @@ class DetailDialog(QDialog):
         self.next_item_btn.clicked.connect(lambda: self._navigate_relative(1))
         nav_bar.addWidget(self.next_item_btn)
 
+        nav_bar.addStretch(1)
+
+        self.hd_badge = QLabel(tr("detail_hd_badge"))
+        self.hd_badge.setVisible(False)
+        self.hd_badge.setStyleSheet(f"""
+            background: rgba(16, 185, 129, 0.18);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.45);
+            border-radius: 7px;
+            padding: 3px 8px;
+            font-size: 10.5px;
+            font-weight: 800;
+        """)
+        nav_bar.addWidget(self.hd_badge)
+
+        self.zoom_out_btn = QPushButton("➖")
+        self.zoom_out_btn.setFixedHeight(28)
+        self.zoom_out_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_out_btn.setToolTip(tr("detail_zoom_out_tip"))
+        self.zoom_out_btn.setStyleSheet(nav_btn_style)
+        nav_bar.addWidget(self.zoom_out_btn)
+
+        self.zoom_reset_btn = QPushButton("100%")
+        self.zoom_reset_btn.setFixedHeight(28)
+        self.zoom_reset_btn.setMinimumWidth(54)
+        self.zoom_reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_reset_btn.setToolTip(tr("detail_zoom_reset_tip"))
+        self.zoom_reset_btn.setStyleSheet(nav_btn_style)
+        nav_bar.addWidget(self.zoom_reset_btn)
+
+        self.zoom_in_btn = QPushButton("➕")
+        self.zoom_in_btn.setFixedHeight(28)
+        self.zoom_in_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_in_btn.setToolTip(tr("detail_zoom_in_tip"))
+        self.zoom_in_btn.setStyleSheet(nav_btn_style)
+        nav_bar.addWidget(self.zoom_in_btn)
+
+        self.fullscreen_btn = QPushButton(tr("detail_fullscreen_btn"))
+        self.fullscreen_btn.setFixedHeight(28)
+        self.fullscreen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fullscreen_btn.setToolTip(tr("detail_fullscreen_tip"))
+        self.fullscreen_btn.setStyleSheet(nav_btn_style)
+        self.fullscreen_btn.clicked.connect(self._toggle_fullscreen_preview)
+        nav_bar.addWidget(self.fullscreen_btn)
+
         preview_layout.addLayout(nav_bar)
         self._update_nav_buttons()
 
         self.preview_stack = QStackedWidget()
         preview_layout.addWidget(self.preview_stack, stretch=1)
 
-        # Page 0: Static image label
-        self.preview_label = QLabel(tr("detail_loading_preview"))
+        # Page 0: Interactive Zoom & Pan static image canvas
+        self.preview_label = ZoomablePreviewWidget(tr("detail_loading_preview"))
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setStyleSheet(f"color: {text_sec}; font-size: 14px; font-weight: 500; background: transparent;")
+        self.preview_label.zoom_changed.connect(self._on_zoom_changed)
+        self.zoom_in_btn.clicked.connect(self.preview_label.zoom_in)
+        self.zoom_out_btn.clicked.connect(self.preview_label.zoom_out)
+        self.zoom_reset_btn.clicked.connect(self.preview_label.reset_zoom)
+        self._update_zoom_controls_visibility()
         self.preview_stack.addWidget(self.preview_label)
 
         # Page 1: Video player if multimedia available
@@ -291,15 +544,15 @@ class DetailDialog(QDialog):
             self.audio_output.setMuted(True)
             self.player.setLoops(QMediaPlayer.Loops.Infinite)
 
-        main_layout.addWidget(preview_container, stretch=3)
+        self.main_layout.addWidget(self.preview_container, stretch=3)
 
         # Right: Info & Actions Sidebar inside a ScrollArea
-        sidebar_scroll = QScrollArea()
-        sidebar_scroll.setWidgetResizable(True)
-        sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        sidebar_scroll.setFixedWidth(346)
-        sidebar_scroll.setStyleSheet("""
+        self.sidebar_scroll = QScrollArea()
+        self.sidebar_scroll.setWidgetResizable(True)
+        self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.sidebar_scroll.setFixedWidth(346)
+        self.sidebar_scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
                 background-color: transparent;
@@ -406,6 +659,19 @@ class DetailDialog(QDialog):
             }}
         """)
         dl_layout.addWidget(self.set_wall_cb)
+
+        # Target monitor selector row
+        monitor_row = QHBoxLayout()
+        monitor_row.setContentsMargins(0, 2, 0, 2)
+        monitor_row.setSpacing(8)
+        self.monitor_lbl = QLabel(tr("detail_monitor_label"))
+        self.monitor_lbl.setStyleSheet(f"color: {text_sec}; font-size: 11.5px; font-weight: 600;")
+        monitor_row.addWidget(self.monitor_lbl)
+
+        self.monitor_combo = QComboBox()
+        self._populate_monitor_combo()
+        monitor_row.addWidget(self.monitor_combo, stretch=1)
+        dl_layout.addLayout(monitor_row)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -526,8 +792,49 @@ class DetailDialog(QDialog):
         sidebar_layout.addWidget(self.tags_frame)
         sidebar_layout.addStretch()
 
-        sidebar_scroll.setWidget(sidebar)
-        main_layout.addWidget(sidebar_scroll)
+        self.sidebar_scroll.setWidget(sidebar)
+        self.main_layout.addWidget(self.sidebar_scroll)
+
+    def _populate_monitor_combo(self):
+        if not hasattr(self, "monitor_combo"):
+            return
+        cur_data = self.monitor_combo.currentData() if self.monitor_combo.count() > 0 else config.wallpaper_monitor
+        self.monitor_combo.blockSignals(True)
+        self.monitor_combo.clear()
+        seen_ids = set()
+        for mid, mlabel in get_available_monitors():
+            seen_ids.add(mid)
+            self.monitor_combo.addItem(mlabel, mid)
+        target = cur_data if cur_data else config.wallpaper_monitor
+        if target and target not in seen_ids:
+            self.monitor_combo.addItem(f"🖥️ {target}", target)
+        idx = self.monitor_combo.findData(target)
+        self.monitor_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.monitor_combo.blockSignals(False)
+
+    def _on_zoom_changed(self, zoom_val: float):
+        if hasattr(self, "zoom_reset_btn"):
+            self.zoom_reset_btn.setText(f"{int(round(zoom_val * 100))}%")
+
+    def _update_zoom_controls_visibility(self):
+        is_static = not getattr(self.item, "is_animated", False)
+        for btn_attr in ("zoom_out_btn", "zoom_reset_btn", "zoom_in_btn"):
+            btn = getattr(self, btn_attr, None)
+            if btn is not None:
+                btn.setVisible(is_static)
+
+    def _toggle_fullscreen_preview(self):
+        self._is_fullscreen_preview = not self._is_fullscreen_preview
+        if self._is_fullscreen_preview:
+            self.sidebar_scroll.setVisible(False)
+            self.main_layout.setContentsMargins(0, 0, 0, 0)
+            self.fullscreen_btn.setText(tr("detail_exit_fullscreen_btn"))
+            self.showFullScreen()
+        else:
+            self.sidebar_scroll.setVisible(True)
+            self.main_layout.setContentsMargins(16, 16, 16, 16)
+            self.fullscreen_btn.setText(tr("detail_fullscreen_btn"))
+            self.showNormal()
 
     def _apply_default_dl_btn_style(self):
         pal = get_palette(config.theme)
@@ -666,6 +973,14 @@ class DetailDialog(QDialog):
         old_url = getattr(self, "_preview_url", None)
         if old_url:
             loader.unregister_callback(old_url, self._on_preview_loaded)
+            self._preview_url = None
+        old_full_url = getattr(self, "_full_preview_url", None)
+        if old_full_url:
+            loader.unregister_callback(old_full_url, self._on_full_preview_loaded)
+            self._full_preview_url = None
+        self._is_full_res_loaded = False
+        if hasattr(self, "hd_badge"):
+            self.hd_badge.setVisible(False)
         if self.fetch_worker and self.fetch_worker.isRunning():
             try:
                 self.fetch_worker.finished.disconnect()
@@ -686,6 +1001,7 @@ class DetailDialog(QDialog):
         # Reset UI for new item
         self._update_window_title()
         self._update_nav_buttons()
+        self._update_zoom_controls_visibility()
         self.id_lbl.setText(self._get_header_html())
         self.preview_stack.setCurrentIndex(0)
         self.preview_label.setPixmap(QPixmap())
@@ -719,12 +1035,32 @@ class DetailDialog(QDialog):
         self._fetch_full_details()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Left:
+        if event.key() == Qt.Key.Key_F11:
+            self._toggle_fullscreen_preview()
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_Escape and self._is_fullscreen_preview:
+            self._toggle_fullscreen_preview()
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_Left:
             self._navigate_relative(-1)
             event.accept()
             return
         elif event.key() == Qt.Key.Key_Right:
             self._navigate_relative(1)
+            event.accept()
+            return
+        elif event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.preview_label.zoom_in()
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_Minus:
+            self.preview_label.zoom_out()
+            event.accept()
+            return
+        elif event.key() == Qt.Key.Key_0:
+            self.preview_label.reset_zoom()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -754,6 +1090,20 @@ class DetailDialog(QDialog):
         self.open_web_btn.setText(tr("detail_open_web"))
         self.prev_item_btn.setToolTip(tr("detail_prev_tip"))
         self.next_item_btn.setToolTip(tr("detail_next_tip"))
+        if hasattr(self, "zoom_in_btn"):
+            self.zoom_in_btn.setToolTip(tr("detail_zoom_in_tip"))
+            self.zoom_out_btn.setToolTip(tr("detail_zoom_out_tip"))
+            self.zoom_reset_btn.setToolTip(tr("detail_zoom_reset_tip"))
+        if hasattr(self, "fullscreen_btn"):
+            self.fullscreen_btn.setText(
+                tr("detail_exit_fullscreen_btn") if self._is_fullscreen_preview else tr("detail_fullscreen_btn")
+            )
+            self.fullscreen_btn.setToolTip(tr("detail_fullscreen_tip"))
+        if hasattr(self, "hd_badge"):
+            self.hd_badge.setText(tr("detail_hd_badge"))
+        if hasattr(self, "monitor_lbl"):
+            self.monitor_lbl.setText(tr("detail_monitor_label"))
+            self._populate_monitor_combo()
         if hasattr(self, "copy_img_btn"):
             self.copy_img_btn.setText(tr("detail_copy_btn"))
         if not self.saved_path:
@@ -798,21 +1148,63 @@ class DetailDialog(QDialog):
                 self.meta_labels[k].setText(tr(tr_key))
 
     def _load_preview(self):
-        url = self.item.thumb_large or self.item.thumb_original or self.item.thumb_small
-        if not url:
-            return
+        self._is_full_res_loaded = False
+        if hasattr(self, "hd_badge"):
+            self.hd_badge.setVisible(False)
 
-        self._preview_url = url
-        loaded = loader.load_image(url, is_thumb=True, callback=self._on_preview_loaded)
+        # 1. If already installed locally and is a static image, load crisp full resolution directly from disk!
+        if not getattr(self.item, "is_animated", False) and self.saved_path and os.path.exists(self.saved_path):
+            local_pm = QPixmap(self.saved_path)
+            if not local_pm.isNull():
+                self._update_preview(local_pm, is_full_res=True)
+                return
+
+        # 2. Show cached/downloaded thumbnail immediately for instant responsiveness
+        url = self.item.thumb_large or self.item.thumb_original or self.item.thumb_small
+        if url:
+            self._preview_url = url
+            loaded = loader.load_image(url, is_thumb=True, callback=self._on_preview_loaded)
+            if loaded:
+                pm = loader.cache.get_pixmap(url, is_thumb=True)
+                if pm and not pm.isNull():
+                    self._update_preview(pm, is_full_res=False)
+
+        # 3. Simultaneously fetch full-resolution static image in background
+        if not getattr(self.item, "is_animated", False):
+            self._request_full_res_preview()
+
+    def _request_full_res_preview(self):
+        if self._is_full_res_loaded or getattr(self.item, "is_animated", False):
+            return
+        if self.saved_path and os.path.exists(self.saved_path):
+            local_pm = QPixmap(self.saved_path)
+            if not local_pm.isNull():
+                self._update_preview(local_pm, is_full_res=True)
+                return
+
+        full_url = (self.item.path or "").strip()
+        if not full_url.startswith("http"):
+            return
+        if full_url == self._full_preview_url:
+            return
+        if self._full_preview_url:
+            loader.unregister_callback(self._full_preview_url, self._on_full_preview_loaded)
+        self._full_preview_url = full_url
+        loaded = loader.load_image(full_url, is_thumb=False, callback=self._on_full_preview_loaded)
         if loaded:
-            pm = loader.cache.get_pixmap(url, is_thumb=True)
-            if pm:
-                self._update_preview(pm)
+            pm = loader.cache.get_pixmap(full_url, is_thumb=False)
+            if pm and not pm.isNull():
+                self._on_full_preview_loaded(pm)
 
     def _cleanup_signal(self):
         url = getattr(self, "_preview_url", None)
         if url:
             loader.unregister_callback(url, self._on_preview_loaded)
+            self._preview_url = None
+        full_url = getattr(self, "_full_preview_url", None)
+        if full_url:
+            loader.unregister_callback(full_url, self._on_full_preview_loaded)
+            self._full_preview_url = None
         try:
             i18n.language_changed.disconnect(self.retranslate_ui)
         except Exception:
@@ -841,7 +1233,13 @@ class DetailDialog(QDialog):
                 setattr(self, w_attr, None)
 
     def _on_preview_loaded(self, pixmap: QPixmap):
-        self._update_preview(pixmap)
+        if self._is_full_res_loaded:
+            return
+        self._update_preview(pixmap, is_full_res=False)
+
+    def _on_full_preview_loaded(self, pixmap: QPixmap):
+        if pixmap and not pixmap.isNull():
+            self._update_preview(pixmap, is_full_res=True)
 
     def closeEvent(self, event):
         self._cleanup_signal()
@@ -855,25 +1253,20 @@ class DetailDialog(QDialog):
             self.player.stop()
         super().reject()
 
-    def _update_preview(self, pixmap: QPixmap):
+    def _update_preview(self, pixmap: QPixmap, is_full_res: bool = False):
+        if pixmap is None or pixmap.isNull():
+            return
         self._current_pixmap = pixmap
-        lbl_size = self.preview_label.size()
-        w = max(400, lbl_size.width())
-        h = max(300, lbl_size.height())
-        scaled = pixmap.scaled(
-            QSize(w, h),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self.preview_label.setPixmap(scaled)
-        self.preview_label.setText("")
+        preserve = self._is_full_res_loaded or (self.preview_label.zoom_factor > 1.01)
+        if is_full_res:
+            self._is_full_res_loaded = True
+            if hasattr(self, "hd_badge"):
+                self.hd_badge.setVisible(True)
+        self.preview_label.set_source_pixmap(pixmap, preserve_zoom=preserve)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        target_url = self.item.thumb_large or self.item.thumb_original or self.item.thumb_small
-        pm = loader.cache.get_pixmap(target_url, is_thumb=True)
-        if pm and not pm.isNull():
-            self._update_preview(pm)
+        self.preview_label.update()
 
     def _fetch_full_details(self):
         if getattr(self.item, "_osu_meta", None):
@@ -888,6 +1281,10 @@ class DetailDialog(QDialog):
         self.item = full_item
         self._populate_metadata()
         self._populate_colors()
+        self._update_zoom_controls_visibility()
+
+        if not getattr(full_item, "is_animated", False) and not self._is_full_res_loaded:
+            self._request_full_res_preview()
 
         # If animated wallpaper and has preview video URL, switch to video view!
         if HAS_MULTIMEDIA and getattr(full_item, "is_animated", False) and full_item.preview_video_url and self.player:
@@ -1022,11 +1419,13 @@ class DetailDialog(QDialog):
 
         # Automatically set desktop wallpaper if requested
         if self.set_wall_cb.isChecked():
+            target_mon = self.monitor_combo.currentData() if hasattr(self, "monitor_combo") else config.wallpaper_monitor
             ok, msg = set_desktop_wallpaper(
                 saved_path,
                 config.custom_wallpaper_cmd,
                 config.wallpaper_setter,
                 config.custom_video_wallpaper_cmd,
+                monitor=target_mon or "all",
             )
             if ok:
                 self.dl_status_lbl.setText(tr("download_status_set"))
@@ -1127,11 +1526,13 @@ class DetailDialog(QDialog):
 
     def _on_set_wall_now(self):
         if self.saved_path and os.path.exists(self.saved_path):
+            target_mon = self.monitor_combo.currentData() if hasattr(self, "monitor_combo") else config.wallpaper_monitor
             ok, msg = set_desktop_wallpaper(
                 self.saved_path,
                 config.custom_wallpaper_cmd,
                 config.wallpaper_setter,
                 config.custom_video_wallpaper_cmd,
+                monitor=target_mon or "all",
             )
             if ok:
                 self.dl_status_lbl.setText(tr("download_status_set"))

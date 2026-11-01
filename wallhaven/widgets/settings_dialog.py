@@ -26,6 +26,7 @@ from wallhaven.styles import get_available_themes, get_stylesheet, is_matugen_av
 from PyQt6.QtWidgets import QApplication
 from wallhaven.wallpaper import (
     detect_wallpaper_command,
+    get_available_monitors,
     get_available_wallpaper_setters,
     set_desktop_wallpaper,
 )
@@ -35,6 +36,8 @@ from wallhaven.i18n import tr, i18n
 
 
 class SettingsDialog(QDialog):
+    _lingering_workers: set = set()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("settings_title"))
@@ -44,6 +47,7 @@ class SettingsDialog(QDialog):
         self._all_setters = get_available_wallpaper_setters()
         self.check_worker: UpdateCheckWorker | None = None
         self.latest_update_info: UpdateInfo | None = None
+        self._cleaned_up: bool = False
 
         # Store initial settings for preview rollback on cancel
         self._orig_theme = config.get("theme", "matugen" if is_matugen_available() else "dark")
@@ -207,8 +211,21 @@ class SettingsDialog(QDialog):
 
         wall_layout.addLayout(method_row)
 
+        # Target monitor selector row
+        monitor_row = QHBoxLayout()
+        self.monitor_lbl = QLabel(tr("monitor_label"))
+        self.monitor_lbl.setStyleSheet("color: #cbd5e1; font-size: 12px;")
+        monitor_row.addWidget(self.monitor_lbl)
+
+        self.monitor_combo = QComboBox()
+        self._populate_monitor_combo()
+        self.monitor_combo.currentIndexChanged.connect(self._on_setter_changed)
+        monitor_row.addWidget(self.monitor_combo, stretch=1)
+        wall_layout.addLayout(monitor_row)
+
         # Active detection description
-        detected_list = detect_wallpaper_command()
+        cur_mon = self.monitor_combo.currentData() or "all"
+        detected_list = detect_wallpaper_command(monitor=cur_mon)
         detected_str = " ".join(detected_list) if detected_list else tr("tool_none")
         self.det_lbl = QLabel(tr("detected_tool", tool=detected_str))
         self.det_lbl.setStyleSheet("color: #94a3b8; font-size: 11px;")
@@ -338,10 +355,27 @@ class SettingsDialog(QDialog):
             self.setter_combo.setCurrentIndex(0)
         self.setter_combo.blockSignals(False)
 
+    def _populate_monitor_combo(self):
+        cur_data = self.monitor_combo.currentData() if hasattr(self, "monitor_combo") and self.monitor_combo.count() > 0 else config.wallpaper_monitor
+        self.monitor_combo.blockSignals(True)
+        self.monitor_combo.clear()
+        monitors = get_available_monitors()
+        seen_ids = set()
+        for mid, mlabel in monitors:
+            seen_ids.add(mid)
+            self.monitor_combo.addItem(mlabel, mid)
+        target = cur_data if cur_data else config.wallpaper_monitor
+        if target and target not in seen_ids:
+            self.monitor_combo.addItem(f"🖥️ {target}", target)
+        idx = self.monitor_combo.findData(target)
+        self.monitor_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.monitor_combo.blockSignals(False)
+
     def _on_setter_changed(self):
         setter_id = self.setter_combo.currentData()
+        cur_mon = self.monitor_combo.currentData() if hasattr(self, "monitor_combo") else "all"
         if setter_id == "auto":
-            detected_list = detect_wallpaper_command()
+            detected_list = detect_wallpaper_command(monitor=cur_mon or "all")
             detected_str = " ".join(detected_list) if detected_list else tr("tool_none")
             self.det_lbl.setText(tr("detected_tool", tool=detected_str))
         elif setter_id == "custom":
@@ -384,8 +418,9 @@ class SettingsDialog(QDialog):
         setter_id = self.setter_combo.currentData()
         custom_cmd = self.custom_cmd_input.text().strip()
         custom_vid = self.custom_video_input.text().strip()
+        target_mon = self.monitor_combo.currentData() or "all"
 
-        ok, msg = set_desktop_wallpaper(sample_file, custom_cmd, setter_id, custom_vid)
+        ok, msg = set_desktop_wallpaper(sample_file, custom_cmd, setter_id, custom_vid, monitor=target_mon)
         if ok:
             QMessageBox.information(
                 self,
@@ -421,6 +456,35 @@ class SettingsDialog(QDialog):
         if parent and hasattr(parent, "content_canvas") and hasattr(parent.content_canvas, "set_effects_enabled"):
             parent.content_canvas.set_effects_enabled(checked)
 
+    def _cleanup(self):
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        try:
+            i18n.language_changed.disconnect(self.retranslate_ui)
+        except Exception:
+            pass
+        if self.check_worker:
+            worker = self.check_worker
+            self.check_worker = None
+            try:
+                worker.check_finished.disconnect(self._on_check_finished)
+                worker.check_failed.disconnect(self._on_check_failed)
+            except Exception:
+                pass
+            if worker.isRunning():
+                worker.setParent(None)
+                SettingsDialog._lingering_workers.add(worker)
+                worker.finished.connect(lambda w=worker: SettingsDialog._lingering_workers.discard(w))
+
+    def accept(self):
+        self._cleanup()
+        super().accept()
+
+    def closeEvent(self, event):
+        self._cleanup()
+        super().closeEvent(event)
+
     def reject(self):
         # Revert live preview changes if cancelled
         if config.get("theme") != self._orig_theme:
@@ -438,6 +502,7 @@ class SettingsDialog(QDialog):
             parent = self.parent()
             if parent and hasattr(parent, "content_canvas") and hasattr(parent.content_canvas, "set_effects_enabled"):
                 parent.content_canvas.set_effects_enabled(self._orig_effects)
+        self._cleanup()
         super().reject()
 
     def retranslate_ui(self):
@@ -457,10 +522,14 @@ class SettingsDialog(QDialog):
         self.wall_group.setTitle(tr("wall_group"))
         self.auto_wall_cb.setText(tr("auto_wall_checkbox"))
         self.method_lbl.setText(tr("wallpaper_setter_label"))
+        if hasattr(self, "monitor_lbl"):
+            self.monitor_lbl.setText(tr("monitor_label"))
         self.test_wall_btn.setText(tr("test_setter_btn"))
         self.test_wall_btn.setToolTip(tr("test_setter_tip"))
 
         self._populate_setter_combo()
+        if hasattr(self, "monitor_combo"):
+            self._populate_monitor_combo()
         self._on_setter_changed()
 
         self.custom_cmd_lbl.setText(tr("custom_cmd_label"))
@@ -556,6 +625,8 @@ class SettingsDialog(QDialog):
             config.default_download_dir = chosen_dir
         config.auto_set_wallpaper = self.auto_wall_cb.isChecked()
         config.wallpaper_setter = self.setter_combo.currentData() or "auto"
+        if hasattr(self, "monitor_combo"):
+            config.wallpaper_monitor = self.monitor_combo.currentData() or "all"
         config.custom_wallpaper_cmd = self.custom_cmd_input.text().strip()
         config.custom_video_wallpaper_cmd = self.custom_video_input.text().strip()
         config.language = self.lang_combo.currentData()

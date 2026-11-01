@@ -337,7 +337,13 @@ class PfpCard(QFrame):
         self.set_avatar_requested.emit(self.item)
 
     def _on_copy_clicked(self):
-        pm = self._pixmap or cache.get_pixmap(self.item.url, is_thumb=True)
+        # Prefer full-resolution unrounded image from PFP cache, or raw unrounded thumbnail from disk cache
+        full_cache = pfps_client._cache_dir / self.item.filename
+        pm = None
+        if full_cache.exists() and full_cache.stat().st_size > 0:
+            pm = QPixmap(str(full_cache))
+        if not pm or pm.isNull():
+            pm = cache.get_pixmap(self.item.url, is_thumb=True) or self._pixmap
         if pm and not pm.isNull():
             pfps_client.copy_image_to_clipboard(pm)
         self.copy_requested.emit(self.item)

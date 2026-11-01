@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shlex
@@ -6,9 +7,84 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
+from wallhaven.config import config
 from wallhaven.i18n import tr
 
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".flv", ".wmv"}
+
+
+def get_available_monitors() -> list[tuple[str, str]]:
+    """
+    Detects connected monitors/outputs and returns a list of (id, label) tuples.
+    Always begins with ("all", tr("monitor_all")).
+    """
+    monitors: list[tuple[str, str]] = [("all", tr("monitor_all"))]
+    seen: set[str] = {"all"}
+
+    # 1. Hyprland (hyprctl monitors -j) - gives exact Wayland connector names (DP-1, HDMI-A-1, eDP-1)
+    if sys.platform != "win32" and shutil.which("hyprctl"):
+        try:
+            res = subprocess.run(
+                ["hyprctl", "monitors", "-j"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                data = json.loads(res.stdout)
+                if isinstance(data, list):
+                    for m in data:
+                        name = str(m.get("name", "")).strip()
+                        if name and name not in seen:
+                            seen.add(name)
+                            w = m.get("width", "")
+                            h = m.get("height", "")
+                            model = str(m.get("model", "") or m.get("description", "")).strip()
+                            res_str = f" ({w}×{h})" if w and h else ""
+                            model_str = f" — {model[:28]}" if model else ""
+                            monitors.append((name, f"🖥️ {name}{res_str}{model_str}"))
+        except Exception:
+            pass
+
+    # 2. Qt QGuiApplication screens (works across Wayland, X11, and Windows)
+    if len(monitors) == 1:
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            app = QGuiApplication.instance()
+            if app is not None:
+                for screen in QGuiApplication.screens():
+                    raw_name = (screen.name() or "").strip()
+                    # Extract connector token if formatted like "DP-1 (..."
+                    name = raw_name.split()[0] if raw_name else ""
+                    if name and name not in seen:
+                        seen.add(name)
+                        sz = screen.size()
+                        res_str = f" ({sz.width()}×{sz.height()})" if sz.width() > 0 else ""
+                        monitors.append((name, f"🖥️ {name}{res_str}"))
+        except Exception:
+            pass
+
+    # 3. xrandr fallback on Linux X11
+    if sys.platform != "win32" and len(monitors) == 1 and shutil.which("xrandr"):
+        try:
+            res = subprocess.run(
+                ["xrandr", "--listmonitors"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 4 and parts[0].endswith(":"):
+                        name = parts[-1].strip()
+                        if name and name not in seen:
+                            seen.add(name)
+                            monitors.append((name, f"🖥️ {name}"))
+        except Exception:
+            pass
+
+    return monitors
 
 
 def is_video_file(file_path: str) -> bool:
@@ -257,15 +333,21 @@ def get_available_wallpaper_setters() -> list[dict]:
     return setters
 
 
-def detect_wallpaper_command(for_video: bool = False) -> list[str]:
+def detect_wallpaper_command(for_video: bool = False, monitor: str = "all") -> list[str]:
     """
     Detects the best wallpaper setter command for the current environment.
     If for_video is True, prioritizes tools capable of playing video wallpapers.
     """
+    mon = (monitor or "all").strip()
+    is_specific = bool(mon and mon != "all")
+
     if sys.platform == "win32":
         if for_video:
             if shutil.which("lively") or shutil.which("Lively"):
-                return ["lively", "setwp", "--file", "{file}"]
+                cmd = ["lively", "setwp", "--file", "{file}"]
+                if is_specific:
+                    cmd.extend(["--monitor", mon])
+                return cmd
             return []
         return [tr("setter_desc_win_api")]
 
@@ -275,11 +357,11 @@ def detect_wallpaper_command(for_video: bool = False) -> list[str]:
     if for_video:
         # 1. Quickshell natively supports video wallpapers!
         if shutil.which("qs") and qs_entry:
-            return ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", "{file}", "fade"]
+            return ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", mon if is_specific else "all", "{file}", "fade"]
 
         # 2. mpvpaper on Wayland
         if shutil.which("mpvpaper"):
-            return ["mpvpaper", "-vs", "-o", "no-audio --loop", "*", "{file}"]
+            return ["mpvpaper", "-vs", "-o", "no-audio --loop", mon if is_specific else "*", "{file}"]
 
         # 3. xwinwrap + mpv on X11
         if shutil.which("xwinwrap") and shutil.which("mpv"):
@@ -288,36 +370,52 @@ def detect_wallpaper_command(for_video: bool = False) -> list[str]:
         return []
 
     # Static wallpaper detection
-    # 0. Hyprland Rice Script (set-wallpaper.sh)
+    # 0. Hyprland Rice Script (set-wallpaper.sh) - only when targeting all monitors, or pass monitor arg
     hypr_script = Path.home() / ".config/hypr/scripts/set-wallpaper.sh"
-    if hypr_script.exists() and os.access(hypr_script, os.X_OK):
+    if hypr_script.exists() and os.access(hypr_script, os.X_OK) and not is_specific:
         return ["bash", str(hypr_script), "{file}"]
 
     # 0b. awww (Modern Wayland wallpaper daemon)
     if shutil.which("awww"):
-        return ["awww", "img", "{file}", "--transition-type", "fade", "--transition-duration", "1"]
+        cmd = ["awww", "img", "{file}"]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["--transition-type", "fade", "--transition-duration", "1"])
+        return cmd
 
     # 1. Quickshell
     if shutil.which("qs") and qs_entry:
-        return ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", "{file}", "fade"]
+        return ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", mon if is_specific else "all", "{file}", "fade"]
     if qs_script.exists() and os.access(qs_script, os.X_OK):
         return [str(qs_script), "--image", "{file}"]
 
     # 2. swww
     if shutil.which("swww"):
-        return ["swww", "img", "--transition-type", "grow", "{file}"]
+        cmd = ["swww", "img"]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["--transition-type", "grow", "{file}"])
+        return cmd
 
     # 3. waypaper
     if shutil.which("waypaper"):
-        return ["waypaper", "--wallpaper", "{file}"]
+        cmd = ["waypaper", "--wallpaper", "{file}"]
+        if is_specific:
+            cmd.extend(["--monitor", mon])
+        return cmd
 
     # 4. hyprpaper
     if shutil.which("hyprpaper") and shutil.which("hyprctl"):
-        return ["hyprctl", "hyprpaper", "wallpaper", ",{file}"]
+        target = f"{mon},{{file}}" if is_specific else ",{file}"
+        return ["hyprctl", "hyprpaper", "wallpaper", target]
 
     # 5. swaybg
     if shutil.which("swaybg"):
-        return ["swaybg", "-i", "{file}", "-m", "fill"]
+        cmd = ["swaybg"]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["-i", "{file}", "-m", "fill"])
+        return cmd
 
     # 6. KDE Plasma
     if shutil.which("plasma-apply-wallpaperimage"):
@@ -440,13 +538,17 @@ def set_desktop_wallpaper(
     custom_cmd: str = "",
     setter_id: str = "auto",
     custom_video_cmd: str = "",
+    monitor: str = "",
 ) -> Tuple[bool, str]:
     """
     Sets the downloaded wallpaper on the desktop and triggers Matugen palette update.
     Supports both static images and animated video wallpapers (.mp4, .webm).
     Returns (success: bool, message: str).
     """
-    success, msg = _set_desktop_wallpaper_impl(file_path, custom_cmd, setter_id, custom_video_cmd)
+    target_monitor = (monitor or config.wallpaper_monitor or "all").strip()
+    success, msg = _set_desktop_wallpaper_impl(
+        file_path, custom_cmd, setter_id, custom_video_cmd, monitor=target_monitor
+    )
     if success:
         try:
             trigger_matugen_refresh(str(Path(file_path).resolve()))
@@ -460,6 +562,7 @@ def _set_desktop_wallpaper_impl(
     custom_cmd: str = "",
     setter_id: str = "auto",
     custom_video_cmd: str = "",
+    monitor: str = "all",
 ) -> Tuple[bool, str]:
     """
     Sets the downloaded wallpaper on the desktop.
@@ -471,27 +574,32 @@ def _set_desktop_wallpaper_impl(
 
     abs_path = str(Path(file_path).resolve())
     is_video = is_video_file(abs_path)
+    mon = (monitor or "all").strip()
+    is_specific = bool(mon and mon != "all")
 
     # 1. Custom video command specified and file is video
     if is_video and custom_video_cmd.strip():
-        cmd_str = _substitute_file_placeholder(custom_video_cmd, abs_path)
+        cmd_str = _substitute_file_placeholder(custom_video_cmd, abs_path, mon)
         return _run_shell_cmd(cmd_str, abs_path)
 
     # 2. General custom command specified
     if custom_cmd.strip() and (setter_id == "custom" or setter_id == "vlastni"):
-        cmd_str = _substitute_file_placeholder(custom_cmd, abs_path)
+        cmd_str = _substitute_file_placeholder(custom_cmd, abs_path, mon)
         return _run_shell_cmd(cmd_str, abs_path)
 
     # 3. Explicit setter selected
     if setter_id and setter_id not in ("auto", "automaticky", "custom", "vlastni"):
-        return _apply_specific_setter(setter_id, abs_path, is_video)
+        return _apply_specific_setter(setter_id, abs_path, is_video, monitor=mon)
 
     # 4. Windows Native API (fallback for auto on Windows)
     if sys.platform == "win32":
         if is_video:
             if shutil.which("lively") or shutil.which("Lively"):
-                cmd = "lively" if shutil.which("lively") else "Lively"
-                return _run_cmd_list([cmd, "setwp", "--file", abs_path], abs_path)
+                cmd_bin = "lively" if shutil.which("lively") else "Lively"
+                cmd_list = [cmd_bin, "setwp", "--file", abs_path]
+                if is_specific:
+                    cmd_list.extend(["--monitor", mon])
+                return _run_cmd_list(cmd_list, abs_path)
             return False, tr("win_lively_req")
         try:
             import ctypes
@@ -512,16 +620,16 @@ def _set_desktop_wallpaper_impl(
 
     # 5. Linux Automatic Detection
     if is_video:
-        cmd_template = detect_wallpaper_command(for_video=True)
+        cmd_template = detect_wallpaper_command(for_video=True, monitor=mon)
         if not cmd_template:
             return False, tr("wall_no_video_player")
     else:
-        cmd_template = detect_wallpaper_command(for_video=False)
+        cmd_template = detect_wallpaper_command(for_video=False, monitor=mon)
         if not cmd_template:
             return False, tr("wall_no_setter_found")
 
     # If using hyprpaper, preload first
-    if len(cmd_template) > 0 and "hyprpaper" in cmd_template[0]:
+    if len(cmd_template) > 1 and "hyprpaper" in cmd_template[1]:
         try:
             subprocess.run(
                 ["hyprctl", "hyprpaper", "preload", abs_path],
@@ -542,11 +650,11 @@ def _set_desktop_wallpaper_impl(
         except Exception as e:
             return False, str(e)
 
-    cmd = [arg.replace("{file}", abs_path) for arg in cmd_template]
+    cmd = [arg.replace("{file}", abs_path).replace("{monitor}", mon) for arg in cmd_template]
     if cmd and cmd[0] in ("mpvpaper", "swaybg", "xwinwrap"):
         kill_map = {
-            "mpvpaper": ["pkill", "mpvpaper"],
-            "swaybg": ["pkill", "swaybg"],
+            "mpvpaper": ["pkill", "-f", f"mpvpaper.*{mon}"] if is_specific else ["pkill", "mpvpaper"],
+            "swaybg": ["pkill", "-f", f"swaybg.*-o {mon}"] if is_specific else ["pkill", "swaybg"],
             "xwinwrap": ["pkill", "-f", "mpv.*--wid"],
         }
         return _spawn_daemon(kill_map[cmd[0]], cmd, abs_path)
@@ -567,24 +675,38 @@ def _set_desktop_wallpaper_impl(
         return False, str(e)
 
 
-def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tuple[bool, str]:
+def _apply_specific_setter(
+    setter_id: str,
+    abs_path: str,
+    is_video: bool,
+    monitor: str = "all",
+) -> Tuple[bool, str]:
     """Applies a user-chosen wallpaper setter."""
+    mon = (monitor or "all").strip()
+    is_specific = bool(mon and mon != "all")
+
     if setter_id == "hyprland_script":
         hypr_script = Path.home() / ".config/hypr/scripts/set-wallpaper.sh"
         if not hypr_script.exists():
             return False, tr("hypr_script_not_found")
-        return _run_cmd_list(["bash", str(hypr_script), abs_path], abs_path)
+        cmd = ["bash", str(hypr_script), abs_path]
+        if is_specific:
+            cmd.append(mon)
+        return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "awww":
         if not shutil.which("awww"):
             return False, tr("awww_not_installed")
-        cmd = ["awww", "img", abs_path, "--transition-type", "fade", "--transition-duration", "1"]
+        cmd = ["awww", "img", abs_path]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["--transition-type", "fade", "--transition-duration", "1"])
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "quickshell":
         qs_entry = find_quickshell_entry()
         if qs_entry and shutil.which("qs"):
-            cmd = ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", "all", abs_path, "fade"]
+            cmd = ["qs", "ipc", "-p", qs_entry, "call", "wallpaper", "setWallpaper", mon if is_specific else "all", abs_path, "fade"]
         else:
             qs_script = Path.home() / ".config/quickshell/ii/scripts/colors/switchwall.sh"
             if qs_script.exists() and os.access(qs_script, os.X_OK):
@@ -603,9 +725,10 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
     elif setter_id == "mpvpaper":
         if not shutil.which("mpvpaper"):
             return False, tr("mpvpaper_not_installed")
+        kill_cmd = ["pkill", "-f", f"mpvpaper.*{mon}"] if is_specific else ["pkill", "mpvpaper"]
         return _spawn_daemon(
-            ["pkill", "mpvpaper"],
-            ["mpvpaper", "-vs", "-o", "no-audio --loop", "*", abs_path],
+            kill_cmd,
+            ["mpvpaper", "-vs", "-o", "no-audio --loop", mon if is_specific else "*", abs_path],
             abs_path,
         )
 
@@ -613,21 +736,30 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
         if not shutil.which("hyprpaper") or not shutil.which("hyprctl"):
             return False, tr("hyprpaper_not_installed")
         subprocess.run(["hyprctl", "hyprpaper", "preload", abs_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        cmd = ["hyprctl", "hyprpaper", "wallpaper", f",{abs_path}"]
+        target = f"{mon},{abs_path}" if is_specific else f",{abs_path}"
+        cmd = ["hyprctl", "hyprpaper", "wallpaper", target]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "swww":
         if not shutil.which("swww"):
             return False, tr("swww_not_installed")
-        cmd = ["swww", "img", "--transition-type", "grow", abs_path]
+        cmd = ["swww", "img"]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["--transition-type", "grow", abs_path])
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "swaybg":
         if not shutil.which("swaybg"):
             return False, tr("swaybg_not_installed")
+        cmd = ["swaybg"]
+        if is_specific:
+            cmd.extend(["-o", mon])
+        cmd.extend(["-i", abs_path, "-m", "fill"])
+        kill_cmd = ["pkill", "-f", f"swaybg.*-o {mon}"] if is_specific else ["pkill", "swaybg"]
         return _spawn_daemon(
-            ["pkill", "swaybg"],
-            ["swaybg", "-i", abs_path, "-m", "fill"],
+            kill_cmd,
+            cmd,
             abs_path,
         )
 
@@ -635,6 +767,8 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
         if not shutil.which("waypaper"):
             return False, tr("waypaper_not_installed")
         cmd = ["waypaper", "--wallpaper", abs_path]
+        if is_specific:
+            cmd.extend(["--monitor", mon])
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "plasma":
@@ -663,7 +797,8 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "xfce":
-        cmd = ["xfconf-query", "-c", "xfce4-desktop", "-p", "/backdrop/screen0/monitor0/workspace0/last-image", "-s", abs_path]
+        prop = f"/backdrop/screen0/monitor{mon}/workspace0/last-image" if is_specific else "/backdrop/screen0/monitor0/workspace0/last-image"
+        cmd = ["xfconf-query", "-c", "xfce4-desktop", "-p", prop, "-s", abs_path]
         return _run_cmd_list(cmd, abs_path)
 
     elif setter_id == "feh":
@@ -707,19 +842,26 @@ def _apply_specific_setter(setter_id: str, abs_path: str, is_video: bool) -> Tup
 
     elif setter_id == "win_lively":
         if shutil.which("lively") or shutil.which("Lively"):
-            cmd = "lively" if shutil.which("lively") else "Lively"
-            return _run_cmd_list([cmd, "setwp", "--file", abs_path], abs_path)
+            cmd_bin = "lively" if shutil.which("lively") else "Lively"
+            cmd_list = [cmd_bin, "setwp", "--file", abs_path]
+            if is_specific:
+                cmd_list.extend(["--monitor", mon])
+            return _run_cmd_list(cmd_list, abs_path)
         return False, tr("win_lively_req")
 
     return False, tr("unknown_setter", setter=setter_id)
 
 
-def _substitute_file_placeholder(cmd_template_str: str, abs_path: str) -> str:
-    """Safely substitutes {file} in a custom shell command without double-quoting or injection."""
+def _substitute_file_placeholder(cmd_template_str: str, abs_path: str, monitor: str = "all") -> str:
+    """Safely substitutes {file} and {monitor} in a custom shell command without double-quoting or injection."""
     quoted = f'"{abs_path}"' if sys.platform == "win32" else shlex.quote(abs_path)
+    mon = (monitor or "all").strip()
+    quoted_mon = f'"{mon}"' if sys.platform == "win32" else shlex.quote(mon)
     res = cmd_template_str
     res = res.replace("'{file}'", quoted).replace('"{file}"', quoted)
     res = res.replace("{file}", quoted)
+    res = res.replace("'{monitor}'", quoted_mon).replace('"{monitor}"', quoted_mon)
+    res = res.replace("{monitor}", quoted_mon)
     return res
 
 

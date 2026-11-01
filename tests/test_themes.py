@@ -96,3 +96,27 @@ def test_i18n_keys_parity():
     cs_keys = set(TRANSLATIONS["cs"].keys())
     assert en_keys == cs_keys, f"Mismatched i18n keys: EN-only={en_keys - cs_keys}, CS-only={cs_keys - en_keys}"
 
+
+def test_multi_monitor_detection_and_placeholder(monkeypatch):
+    import shutil
+    from wallhaven.wallpaper import (
+        get_available_monitors,
+        _substitute_file_placeholder,
+        detect_wallpaper_command,
+    )
+
+    monitors = get_available_monitors()
+    assert len(monitors) >= 1
+    assert monitors[0][0] == "all"
+
+    res = _substitute_file_placeholder("swww img -o {monitor} '{file}'", "/tmp/wall.jpg", monitor="DP-1")
+    assert "DP-1" in res
+    assert "/tmp/wall.jpg" in res
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/awww" if name == "awww" else None)
+    cmd_all = detect_wallpaper_command(for_video=False, monitor="all")
+    assert "-o" not in cmd_all
+    cmd_dp1 = detect_wallpaper_command(for_video=False, monitor="DP-1")
+    assert "-o" in cmd_dp1 and "DP-1" in cmd_dp1
+
+

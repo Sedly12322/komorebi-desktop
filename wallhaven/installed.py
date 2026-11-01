@@ -311,8 +311,9 @@ class InstalledManager:
 
         return True, ""
 
-    def get_stats(self) -> dict:
-        self.scan_local_wallpapers()
+    def get_stats(self, rescan: bool = True) -> dict:
+        if rescan:
+            self.scan_local_wallpapers()
         total_count = len(self._items)
         total_bytes = sum(item.get("file_size", 0) for item in self._items.values())
         return {

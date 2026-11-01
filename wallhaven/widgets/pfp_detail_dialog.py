@@ -25,7 +25,7 @@ from wallhaven.i18n import tr
 
 class PfpAssetWorker(QThread):
     """Background worker to download full avatar/GIF without blocking the UI thread."""
-    finished = pyqtSignal(str, bool)  # local_path, is_animated
+    asset_loaded = pyqtSignal(str, bool)  # local_path, is_animated
     failed = pyqtSignal(str)
 
     def __init__(self, item: PfpItem):
@@ -52,13 +52,15 @@ class PfpAssetWorker(QThread):
                     f.write(data)
 
             if not self._cancelled:
-                self.finished.emit(str(local_path), self.item.is_animated)
+                self.asset_loaded.emit(str(local_path), self.item.is_animated)
         except Exception as e:
             if not self._cancelled:
                 self.failed.emit(str(e))
 
 
 class PfpDetailDialog(QDialog):
+    _lingering_workers: set = set()
+
     def __init__(self, item: PfpItem, parent=None):
         super().__init__(parent)
         self.item = item
@@ -70,6 +72,7 @@ class PfpDetailDialog(QDialog):
         self._pixmap: QPixmap | None = None
         self._movie: QMovie | None = None
         self._worker: PfpAssetWorker | None = None
+        self._cleaned_up: bool = False
 
         self._init_ui()
         self._start_asset_loading()
@@ -292,7 +295,7 @@ class PfpDetailDialog(QDialog):
 
         # Load full resolution asset in background thread
         self._worker = PfpAssetWorker(self.item)
-        self._worker.finished.connect(self._on_asset_loaded)
+        self._worker.asset_loaded.connect(self._on_asset_loaded)
         self._worker.failed.connect(self._on_asset_failed)
         self._worker.start()
 
@@ -378,12 +381,30 @@ class PfpDetailDialog(QDialog):
         if self.item.page_url:
             QDesktopServices.openUrl(QUrl(self.item.page_url))
 
-    def closeEvent(self, event):
-        if self._worker and self._worker.isRunning():
-            self._worker.cancel()
-            self._worker.wait(1000)
+    def _cleanup(self):
+        if self._cleaned_up:
+            return
+        self._cleaned_up = True
+        if self._worker:
+            worker = self._worker
             self._worker = None
+            worker.cancel()
+            try:
+                worker.asset_loaded.disconnect(self._on_asset_loaded)
+                worker.failed.disconnect(self._on_asset_failed)
+            except Exception:
+                pass
+            if worker.isRunning():
+                PfpDetailDialog._lingering_workers.add(worker)
+                worker.finished.connect(lambda w=worker: PfpDetailDialog._lingering_workers.discard(w))
         if self._movie:
             self._movie.stop()
             self._movie = None
+
+    def reject(self):
+        self._cleanup()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._cleanup()
         super().closeEvent(event)

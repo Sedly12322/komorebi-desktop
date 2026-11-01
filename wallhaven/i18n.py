@@ -469,6 +469,16 @@ TRANSLATIONS = {
         "detail_copied_btn": "✓ Copied to Clipboard",
         "detail_color_search_tip": "Click to search wallpapers with color {color}",
         "card_installed_badge": "✓ INSTALLED",
+        "monitor_label": "Target Monitor:",
+        "monitor_all": "🖥️ All Monitors",
+        "detail_monitor_label": "🖥️ Monitor:",
+        "detail_zoom_in_tip": "Zoom In (+)",
+        "detail_zoom_out_tip": "Zoom Out (-)",
+        "detail_zoom_reset_tip": "Reset Zoom to 100% (Double-click)",
+        "detail_fullscreen_btn": "⛶ Fullscreen",
+        "detail_exit_fullscreen_btn": "✕ Exit Fullscreen",
+        "detail_fullscreen_tip": "Toggle Fullscreen Preview (F11)",
+        "detail_hd_badge": "✨ FULL RES",
     },
     "cs": {
         # App & Header
@@ -935,6 +945,16 @@ TRANSLATIONS = {
         "detail_copied_btn": "✓ Zkopírováno do schránky",
         "detail_color_search_tip": "Kliknutím vyhledáte tapety s barvou {color}",
         "card_installed_badge": "✓ STAŽENO",
+        "monitor_label": "Cílový monitor:",
+        "monitor_all": "🖥️ Všechny monitory",
+        "detail_monitor_label": "🖥️ Monitor:",
+        "detail_zoom_in_tip": "Přiblížit (+)",
+        "detail_zoom_out_tip": "Oddálit (-)",
+        "detail_zoom_reset_tip": "Resetovat přiblížení na 100 % (Dvojklik)",
+        "detail_fullscreen_btn": "⛶ Celá obrazovka",
+        "detail_exit_fullscreen_btn": "✕ Ukončit celou obrazovku",
+        "detail_fullscreen_tip": "Přepnout náhled přes celou obrazovku (F11)",
+        "detail_hd_badge": "✨ PLNÉ ROZLIŠENÍ",
     }
 }
 

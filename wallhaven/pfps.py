@@ -221,6 +221,19 @@ class PfpsClient:
         except Exception as e:
             return False, str(e)
 
+    def ensure_cached_pfp(self, item: PfpItem) -> Tuple[bool, str]:
+        """Downloads and caches the full-resolution PFP into _cache_dir if not already present."""
+        try:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file = self._cache_dir / item.filename
+            if not (cache_file.exists() and cache_file.stat().st_size > 0):
+                req = urllib.request.Request(item.image_url, headers={"User-Agent": self.USER_AGENT})
+                with urllib.request.urlopen(req, timeout=20) as resp, open(cache_file, "wb") as f:
+                    f.write(resp.read())
+            return True, str(cache_file)
+        except Exception as e:
+            return False, str(e)
+
     def set_system_avatar(self, item: PfpItem, existing_file: Optional[str] = None) -> Tuple[bool, str]:
         """Sets the selected avatar as Linux desktop user profile picture."""
         try:
