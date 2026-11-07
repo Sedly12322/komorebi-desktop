@@ -31,7 +31,7 @@ class ColorButton(QPushButton):
             QPushButton {{
                 background-color: #{self.hex_color};
                 border: {border};
-                border-radius: 12px;
+                border-radius: 2px;
             }}
             QPushButton:hover {{
                 border: 2px solid #818cf8;
@@ -73,7 +73,7 @@ class ColorBar(QFrame):
                 background: #1a1e2b;
                 color: #94a3b8;
                 border: 1px solid #282e42;
-                border-radius: 11px;
+                border-radius: 2px;
                 padding: 3px 10px;
                 font-size: 11px;
                 font-weight: 500;

@@ -45,6 +45,7 @@ class PageJumpPopover(QDialog):
         border = pal.get("border", "#283045")
         accent = pal.get("accent", "#6366f1")
         accent_hover = pal.get("accent_hover", "#4f46e5")
+        accent_text = pal.get("accent_text", "#ffffff")
         text = pal.get("text_primary", "#f8fafc")
         text_muted = pal.get("text_muted", "#94a3b8")
         bg_input = pal.get("bg_input", "#1e293b")
@@ -60,7 +61,7 @@ class PageJumpPopover(QDialog):
             QFrame#jumpCard {{
                 background-color: {bg};
                 border: 1px solid {border};
-                border-radius: 14px;
+                border-radius: 2px;
             }}
             QLabel#jumpTitle {{
                 color: {text};
@@ -76,7 +77,7 @@ class PageJumpPopover(QDialog):
                 background-color: {bg_input};
                 color: {text};
                 border: 1.5px solid {border};
-                border-radius: 8px;
+                border-radius: 2px;
                 padding: 4px 8px;
                 font-size: 13px;
                 font-weight: bold;
@@ -86,9 +87,9 @@ class PageJumpPopover(QDialog):
             }}
             QPushButton#jumpBtn {{
                 background-color: {accent};
-                color: #ffffff;
+                color: {accent_text};
                 border: none;
-                border-radius: 8px;
+                border-radius: 2px;
                 font-size: 12px;
                 font-weight: bold;
                 padding: 0 14px;
@@ -254,13 +255,13 @@ class FloatingPagination(QFrame):
             QFrame#floatingPagination {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {bg_cap}, stop:0.5 {bg}, stop:1 {bg_cap});
                 border: 1.5px solid {accent};
-                border-radius: 22px;
+                border-radius: 2px;
             }}
             QPushButton#paginationPillBtn {{
                 background-color: rgba(255, 255, 255, 0.07);
                 color: {text};
                 border: 1px solid {border};
-                border-radius: 14px;
+                border-radius: 2px;
                 font-size: 14px;
                 font-weight: 900;
                 padding: 0;
@@ -279,7 +280,7 @@ class FloatingPagination(QFrame):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {grad_start}, stop:1 {grad_end});
                 color: {accent_text};
                 border: 1px solid {accent_hover};
-                border-radius: 13px;
+                border-radius: 2px;
                 font-size: 12px;
                 font-weight: 800;
                 padding: 0 14px;

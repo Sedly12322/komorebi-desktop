@@ -17,7 +17,7 @@ class NavTabButton(QPushButton):
                 background: transparent;
                 color: #94a3b8;
                 border: none;
-                border-radius: 7px;
+                border-radius: 2px;
                 padding: 0 12px;
                 font-size: 12px;
                 font-weight: 600;
@@ -110,7 +110,7 @@ class AnimatedCapsuleBar(QWidget):
                         background: transparent;
                         color: #ffffff;
                         border: none;
-                        border-radius: 7px;
+                        border-radius: 2px;
                         padding: 0 12px;
                         font-size: 12px;
                         font-weight: 800;
@@ -122,7 +122,7 @@ class AnimatedCapsuleBar(QWidget):
                         background: transparent;
                         color: #94a3b8;
                         border: none;
-                        border-radius: 7px;
+                        border-radius: 2px;
                         padding: 0 12px;
                         font-size: 12px;
                         font-weight: 600;

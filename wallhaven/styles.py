@@ -78,6 +78,75 @@ def get_asset_path(filename: str) -> Path:
 
 # Curated theme palettes
 THEME_PALETTES: Dict[str, Dict[str, str]] = {
+    "terminal": {
+        "name": "▌ Terminal Phosphor (green)",
+        "bg_base": "#070b08",
+        "bg_card": "#0b120d",
+        "bg_surface": "#0b120d",
+        "bg_subsurface": "#090f0b",
+        "bg_capsule": "#060a07",
+        "bg_input": "#0d1610",
+        "bg_input_hover": "#14221a",
+        "bg_card_hover": "#0f1a13",
+        "border": "#1d3a28",
+        "border_subtle": "#142a1d",
+        "border_hover": "#2f7a4b",
+        "accent": "#33ff77",
+        "accent_hover": "#7dffa8",
+        "accent_gradient_start": "#1fcf5a",
+        "accent_gradient_end": "#33ff77",
+        "accent_surface": "#0f3a20",
+        "accent_text": "#04120a",
+        "text_primary": "#c9f7d8",
+        "text_secondary": "#7fb893",
+        "text_muted": "#4a7a5c",
+    },
+    "terminal_amber": {
+        "name": "▌ Terminal Amber (CRT)",
+        "bg_base": "#0b0904",
+        "bg_card": "#120e06",
+        "bg_surface": "#120e06",
+        "bg_subsurface": "#0f0b05",
+        "bg_capsule": "#090703",
+        "bg_input": "#16110a",
+        "bg_input_hover": "#241b0d",
+        "bg_card_hover": "#1a1408",
+        "border": "#4a3510",
+        "border_subtle": "#33250c",
+        "border_hover": "#8a6218",
+        "accent": "#ffb000",
+        "accent_hover": "#ffcc4d",
+        "accent_gradient_start": "#e69a00",
+        "accent_gradient_end": "#ffb000",
+        "accent_surface": "#3d2a05",
+        "accent_text": "#140d00",
+        "text_primary": "#ffe3a8",
+        "text_secondary": "#c9a25a",
+        "text_muted": "#7d6532",
+    },
+    "terminal_ice": {
+        "name": "▌ Terminal Ice (cyan)",
+        "bg_base": "#050a0d",
+        "bg_card": "#091217",
+        "bg_surface": "#091217",
+        "bg_subsurface": "#070e12",
+        "bg_capsule": "#04080a",
+        "bg_input": "#0b161c",
+        "bg_input_hover": "#12232c",
+        "bg_card_hover": "#0d1b22",
+        "border": "#173a47",
+        "border_subtle": "#10293a",
+        "border_hover": "#2a7a94",
+        "accent": "#3ee6ff",
+        "accent_hover": "#8af0ff",
+        "accent_gradient_start": "#1bc4e0",
+        "accent_gradient_end": "#3ee6ff",
+        "accent_surface": "#0a3340",
+        "accent_text": "#02121a",
+        "text_primary": "#cdf6ff",
+        "text_secondary": "#7fb4c4",
+        "text_muted": "#4a7a8a",
+    },
     "dark": {
         "name": "🌌 Wallhaven Dark",
         "bg_base": "#0d1017",
@@ -968,8 +1037,12 @@ _TEMPLATE_STYLESHEET = """
 QWidget {
     background-color: %(bg_base)s;
     color: %(text_primary)s;
-    font-family: 'Inter', 'Segoe UI', 'Noto Sans', sans-serif;
-    font-size: 13px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Mono', 'Cascadia Code', 'DejaVu Sans Mono', 'Consolas', monospace;
+    font-size: 12.5px;
+}
+
+QLabel {
+    background: transparent;
 }
 
 /* Sidebar & Modern Layout */
@@ -982,20 +1055,20 @@ QFrame#sidebarBrandCard {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 %(bg_input)s, stop:1 %(bg_subsurface)s);
     border: 1.5px solid %(border)s;
     border-top: 1.5px solid %(accent)s;
-    border-radius: 14px;
+    border-radius: 2px;
 }
 
 QFrame#sidebarUtilityDeck {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 %(bg_input)s, stop:1 %(bg_subsurface)s);
     border: 1px solid %(border)s;
-    border-radius: 14px;
+    border-radius: 2px;
 }
 
 QPushButton#sidebarUtilityBtn {
     background-color: transparent;
     color: %(text_secondary)s;
     border: 1px solid transparent;
-    border-radius: 9px;
+    border-radius: 2px;
     text-align: left;
     padding-left: 10px;
     font-size: 11.5px;
@@ -1013,7 +1086,7 @@ QFrame#spotlightBar {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %(bg_surface)s, stop:0.5 %(bg_input)s, stop:1 %(bg_surface)s);
     border: 1.5px solid %(border_hover)s;
     border-top: 2px solid %(accent)s;
-    border-radius: 16px;
+    border-radius: 2px;
     margin: 12px 18px 4px 18px;
     padding: 4px 8px;
 }
@@ -1022,7 +1095,7 @@ QLabel#spotlightIconBadge {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 %(accent_gradient_start)s, stop:1 %(accent_gradient_end)s);
     color: %(accent_text)s;
     border: 1px solid %(accent_hover)s;
-    border-radius: 10px;
+    border-radius: 2px;
     font-size: 15px;
     font-weight: 900;
 }
@@ -1031,7 +1104,7 @@ QLabel#shortcutKeyBadge {
     background-color: %(bg_capsule)s;
     color: %(accent_hover)s;
     border: 1px solid %(border_hover)s;
-    border-radius: 8px;
+    border-radius: 2px;
     padding: 4px 9px;
     font-size: 11px;
     font-weight: 800;
@@ -1042,7 +1115,7 @@ QLineEdit#spotlightInput {
     background-color: %(bg_capsule)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 12px;
+    border-radius: 2px;
     padding: 6px 14px;
     font-size: 13px;
     font-weight: 600;
@@ -1066,7 +1139,7 @@ QFrame#filterPanel {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %(bg_subsurface)s, stop:0.5 %(bg_surface)s, stop:1 %(bg_subsurface)s);
     border: 1.5px solid %(border)s;
     border-left: 3px solid %(accent)s;
-    border-radius: 14px;
+    border-radius: 2px;
     margin: 4px 18px 6px 18px;
     padding: 4px 10px;
 }
@@ -1074,7 +1147,7 @@ QFrame#filterPanel {
 QFrame#colorBarFrame {
     background-color: %(bg_capsule)s;
     border: 1.5px solid %(border)s;
-    border-radius: 12px;
+    border-radius: 2px;
     margin: 0px 18px 6px 18px;
     padding: 6px 14px;
 }
@@ -1096,7 +1169,7 @@ QLabel#filterLabel {
 QFrame#tabsContainer, QWidget#tabsContainer {
     background-color: %(bg_capsule)s;
     border: 1px solid %(border_subtle)s;
-    border-radius: 9px;
+    border-radius: 2px;
     padding: 2px;
 }
 
@@ -1104,7 +1177,7 @@ QPushButton#navTab {
     background: transparent;
     color: %(text_secondary)s;
     border: none;
-    border-radius: 7px;
+    border-radius: 2px;
     padding: 4px 9px;
     font-size: 12px;
     font-weight: 600;
@@ -1126,7 +1199,7 @@ QLineEdit {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 6px 14px;
     font-size: 13px;
     selection-background-color: %(accent)s;
@@ -1143,7 +1216,7 @@ QComboBox {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 4px 10px;
     padding-right: 24px;
     min-width: 85px;
@@ -1182,7 +1255,7 @@ QComboBox QAbstractItemView {
     background-color: %(bg_surface)s;
     color: %(text_primary)s;
     border: 1.5px solid %(accent)s;
-    border-radius: 10px;
+    border-radius: 2px;
     selection-background-color: %(accent)s;
     selection-color: %(accent_text)s;
     outline: none;
@@ -1194,7 +1267,7 @@ QPushButton#headerToolBtn {
     background-color: %(bg_input)s;
     color: %(text_secondary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 9px;
+    border-radius: 2px;
     padding: 5px 11px;
     font-size: 12px;
     font-weight: 700;
@@ -1216,7 +1289,7 @@ QPushButton#toolButton {
     background-color: %(bg_input)s;
     color: %(text_secondary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 9px;
+    border-radius: 2px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 700;
@@ -1240,7 +1313,7 @@ QPushButton#primaryButton {
     border: 1.5px solid %(accent_hover)s;
     color: %(accent_text)s;
     font-weight: 800;
-    border-radius: 11px;
+    border-radius: 2px;
     padding: 6px 18px;
     font-size: 12.5px;
 }
@@ -1259,7 +1332,7 @@ QPushButton {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 9px;
+    border-radius: 2px;
     padding: 5px 11px;
     font-size: 12px;
     font-weight: 600;
@@ -1281,7 +1354,7 @@ QPushButton#filterChip {
     background-color: %(bg_capsule)s;
     color: %(text_secondary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 700;
@@ -1304,7 +1377,7 @@ QPushButton#nsfwChip {
     background-color: %(bg_capsule)s;
     color: %(text_secondary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 700;
@@ -1327,7 +1400,7 @@ QPushButton#sketchyChip {
     background-color: %(bg_capsule)s;
     color: %(text_secondary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 700;
@@ -1349,7 +1422,7 @@ QPushButton#sketchyChip:checked {
 QPushButton#themeChip {
     background-color: %(bg_capsule)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 700;
@@ -1394,7 +1467,7 @@ QScrollBar:vertical {
 QScrollBar::handle:vertical {
     background: %(border_hover)s;
     min-height: 28px;
-    border-radius: 4px;
+    border-radius: 2px;
 }
 
 QScrollBar::handle:vertical:hover {
@@ -1409,7 +1482,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 QFrame#wallpaperCard, QFrame#pfpCard {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 %(bg_input)s, stop:0.6 %(bg_surface)s, stop:1 %(bg_capsule)s);
     border: 1.5px solid %(border_hover)s;
-    border-radius: 15px;
+    border-radius: 2px;
 }
 
 QFrame#wallpaperCard:hover, QFrame#pfpCard:hover {
@@ -1421,14 +1494,14 @@ QFrame#wallpaperCard:hover, QFrame#pfpCard:hover {
 QFrame#sizeSwitcherCapsule {
     background-color: %(bg_capsule)s;
     border: 1.5px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
 }
 
 QPushButton#sizeSwitcherBtn {
     background: transparent;
     color: %(text_muted)s;
     border: none;
-    border-radius: 7px;
+    border-radius: 2px;
     padding: 3px 9px;
     font-size: 11px;
     font-weight: 800;
@@ -1449,17 +1522,17 @@ QLabel#badge {
     background-color: rgba(0, 0, 0, 0.78);
     color: %(text_primary)s;
     border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 5px;
+    border-radius: 2px;
     padding: 2px 6px;
     font-size: 10.5px;
     font-weight: bold;
 }
 
 QLabel#categoryBadge {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %(accent_gradient_start)s, stop:1 %(accent_surface)s);
-    color: #ffffff;
-    border: 1px solid %(accent_hover)s;
-    border-radius: 7px;
+    background-color: %(bg_capsule)s;
+    color: %(accent_hover)s;
+    border: 1px solid %(border_hover)s;
+    border-radius: 2px;
     padding: 2px 8px;
     font-size: 10px;
     font-weight: 800;
@@ -1475,7 +1548,7 @@ QFrame#paginationFrame {
 QLabel#pageBadge {
     background-color: %(bg_input)s;
     border: 1px solid %(border)s;
-    border-radius: 7px;
+    border-radius: 2px;
     padding: 4px 10px;
     min-width: 100px;
     qproperty-alignment: AlignCenter;
@@ -1489,7 +1562,7 @@ QSpinBox {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 8px;
+    border-radius: 2px;
     padding: 3px 6px;
     font-size: 12px;
     font-weight: 600;
@@ -1513,7 +1586,7 @@ QToolTip {
     background-color: %(bg_surface)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 8px;
+    border-radius: 2px;
     padding: 6px 10px;
     font-size: 12px;
 }
@@ -1527,20 +1600,20 @@ QDialog {
 QFrame#previewContainer {
     background-color: %(bg_capsule)s;
     border: 1px solid %(border_subtle)s;
-    border-radius: 12px;
+    border-radius: 2px;
 }
 
 QWidget#detailSidebar {
     background-color: %(bg_surface)s;
     border: 1px solid %(border_subtle)s;
-    border-radius: 12px;
+    border-radius: 2px;
 }
 
 QPushButton#setWallNowBtn {
     background-color: %(accent_surface)s;
     color: %(accent_text)s;
     border: 1.5px solid %(accent)s;
-    border-radius: 8px;
+    border-radius: 2px;
     font-weight: 600;
     font-size: 12px;
     padding: 6px 12px;
@@ -1556,7 +1629,7 @@ QPushButton#sidebarSecondaryBtn {
     background-color: %(bg_input)s;
     color: %(text_primary)s;
     border: 1.5px solid %(border)s;
-    border-radius: 8px;
+    border-radius: 2px;
     font-weight: 600;
     font-size: 12px;
     padding: 6px 12px;
@@ -1570,7 +1643,7 @@ QPushButton#sidebarSecondaryBtn:hover {
 
 QGroupBox {
     border: 1px solid %(border)s;
-    border-radius: 10px;
+    border-radius: 2px;
     margin-top: 10px;
     padding-top: 12px;
     font-weight: bold;

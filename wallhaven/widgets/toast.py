@@ -65,7 +65,7 @@ class KomorebiToast(QWidget):
                 background: rgba(255, 255, 255, 0.08);
                 color: #94a3b8;
                 border: none;
-                border-radius: 10px;
+                border-radius: 2px;
                 font-size: 10px;
                 font-weight: bold;
             }

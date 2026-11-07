@@ -4,6 +4,12 @@ from PyQt6.QtGui import QPixmap, QPainter, QLinearGradient, QColor, QPainterPath
 from PyQt6.QtWidgets import QLabel
 
 
+def _pal() -> dict:
+    from wallhaven.config import config
+    from wallhaven.styles import get_palette
+    return get_palette(config.theme)
+
+
 class ShimmerLabel(QLabel):
     """Image label with smooth animated shimmer skeleton wave and smooth pixmap fade-in."""
 
@@ -100,7 +106,7 @@ class ShimmerLabel(QLabel):
 
         if self._is_shimmering or not self._pixmap or self._pixmap.isNull():
             # Base dark container color matching modern card style
-            painter.fillPath(path, QColor(21, 25, 36))
+            painter.fillPath(path, QColor(_pal().get('bg_input', '#151924')))
 
             # Animated wave gradient
             phase = ShimmerLabel._shared_phase
@@ -109,21 +115,22 @@ class ShimmerLabel(QLabel):
             center_x = (phase * (w + wave_width * 2)) - wave_width
 
             gradient = QLinearGradient(center_x - wave_width / 2, 0, center_x + wave_width / 2, 0)
-            gradient.setColorAt(0.0, QColor(32, 38, 55, 0))
-            gradient.setColorAt(0.5, QColor(99, 102, 241, 70))
-            gradient.setColorAt(1.0, QColor(32, 38, 55, 0))
+            _acc = QColor(_pal().get('accent', '#33ff77'))
+            gradient.setColorAt(0.0, QColor(_acc.red(), _acc.green(), _acc.blue(), 0))
+            gradient.setColorAt(0.5, QColor(_acc.red(), _acc.green(), _acc.blue(), 46))
+            gradient.setColorAt(1.0, QColor(_acc.red(), _acc.green(), _acc.blue(), 0))
 
             painter.fillPath(path, gradient)
 
             # Subtle inner border
             pen = painter.pen()
-            pen.setColor(QColor(45, 55, 78, 120))
+            pen.setColor(QColor(_pal().get('border', '#2d374e')))
             pen.setWidthF(1.0)
             painter.strokePath(path, pen)
 
             txt = self.text()
             if txt:
-                painter.setPen(QColor(148, 163, 184))
+                painter.setPen(QColor(_pal().get('text_secondary', '#94a3b8')))
                 font = painter.font()
                 font.setPointSize(11)
                 font.setBold(True)
@@ -131,10 +138,10 @@ class ShimmerLabel(QLabel):
                 painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, txt)
             else:
                 font = painter.font()
-                font.setPointSize(24)
+                font.setPointSize(10)
                 painter.setFont(font)
-                painter.setOpacity(0.22)
-                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "🖼️")
+                painter.setOpacity(0.45)
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "▒▒ loading ▒▒")
                 painter.setOpacity(1.0)
         else:
             painter.setOpacity(self._fade_opacity)

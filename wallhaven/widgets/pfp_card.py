@@ -1,5 +1,5 @@
 """PfpCard widget for displaying 1:1 square avatars and animated GIFs in Komorebi Desktop."""
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF, QPointF, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QMovie, QCursor, QColor, QPainter, QPainterPath, QLinearGradient, QPen
 from PyQt6.QtWidgets import (
     QFrame,
@@ -77,7 +77,7 @@ class PfpCard(QFrame):
         layout.setSpacing(6)
 
         # 1. Square Avatar with animated shimmer skeleton
-        self.image_label = ShimmerLabel(self, corner_radius=12)
+        self.image_label = ShimmerLabel(self, corner_radius=2)
         self.image_label.setFixedSize(self._img_sz, self._img_sz)
 
         # In-image overlay
@@ -96,7 +96,7 @@ class PfpCard(QFrame):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(139, 92, 246, 0.92), stop:1 rgba(236, 72, 153, 0.92));
                 color: #ffffff;
                 border: 1px solid rgba(255, 255, 255, 0.30);
-                border-radius: 5px;
+                border-radius: 2px;
                 font-weight: 800;
                 font-size: 9px;
                 padding: 2px 6px;
@@ -106,7 +106,7 @@ class PfpCard(QFrame):
                 background-color: rgba(15, 18, 28, 0.86);
                 color: {accent_hover};
                 border: 1px solid {accent};
-                border-radius: 5px;
+                border-radius: 2px;
                 font-weight: 800;
                 font-size: 9px;
                 padding: 2px 6px;
@@ -123,7 +123,7 @@ class PfpCard(QFrame):
             QFrame#cardHoverBar {{
                 background-color: rgba(10, 12, 20, 0.78);
                 border: 1px solid {accent};
-                border-radius: 19px;
+                border-radius: 2px;
             }}
         """)
         self.hover_bar.setVisible(False)
@@ -200,7 +200,7 @@ class PfpCard(QFrame):
                 background-color: rgba(20, 27, 45, 0.92);
                 color: #ffffff;
                 border: 1.5px solid rgba(255, 255, 255, 0.22);
-                border-radius: 15px;
+                border-radius: 2px;
                 font-size: 12px;
                 font-weight: bold;
                 padding: 0;
@@ -216,7 +216,7 @@ class PfpCard(QFrame):
         loader.load_thumbnail(
             self.item.url,
             target_size=target_size,
-            radius=12,
+            radius=2,
             callback=self._set_pixmap_instant
         )
 
@@ -240,28 +240,24 @@ class PfpCard(QFrame):
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         pal = get_palette(config.theme)
-        c1 = QColor(pal.get("accent_gradient_start", pal.get("accent", "#6366f1")))
-        c2 = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#ec4899")))
+        accent = QColor(pal.get("accent", "#33ff77"))
+        border = QColor(pal.get("border", "#1f4d2e"))
 
+        rect = QRectF(0.5, 0.5, float(self.width()) - 1.0, float(self.height()) - 1.0)
         if self._hovered:
-            c1.setAlpha(255)
-            c2.setAlpha(255)
-            pen_w = 2.5
+            painter.setPen(QPen(accent, 1.0))
+            painter.drawRect(rect)
+            L = 10.0
+            painter.setPen(QPen(accent, 2.0))
+            x0, y0, x1, y1 = rect.left(), rect.top(), rect.right(), rect.bottom()
+            for (cx, cy, dx, dy) in ((x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)):
+                painter.drawLine(QPointF(cx, cy), QPointF(cx + dx * L, cy))
+                painter.drawLine(QPointF(cx, cy), QPointF(cx, cy + dy * L))
         else:
-            c1.setAlpha(115)
-            c2.setAlpha(95)
-            pen_w = 1.5
-
-        rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 14.0, 14.0)
-        grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
-        grad.setColorAt(0.0, c1)
-        grad.setColorAt(1.0, c2)
-        pen = QPen(grad, pen_w)
-        painter.strokePath(path, pen)
+            painter.setPen(QPen(border, 1.0))
+            painter.drawRect(rect)
         painter.end()
 
     def enterEvent(self, event):

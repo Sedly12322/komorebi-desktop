@@ -77,7 +77,7 @@ class WallpaperGridWidget(QWidget):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {bg}, stop:1 {pal.get('bg_surface', '#161b28')});
                 border: 1.5px solid {border};
                 border-top: 2px solid {accent};
-                border-radius: 18px;
+                border-radius: 2px;
             }}
         """)
         self.empty_title_lbl.setStyleSheet(f"color: {text_pri}; font-size: 15px; font-weight: 800; background: transparent; border: none;")

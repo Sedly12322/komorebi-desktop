@@ -467,7 +467,7 @@ class MainWindow(QMainWindow):
                 background-color: #151824;
                 color: #94a3b8;
                 border: 1.5px solid #232838;
-                border-radius: 8px;
+                border-radius: 2px;
                 font-weight: bold;
                 font-size: 14px;
                 padding: 0;
@@ -628,7 +628,7 @@ class MainWindow(QMainWindow):
                 background: #1e293b;
                 color: #e2e8f0;
                 border: 1px solid #334155;
-                border-radius: 5px;
+                border-radius: 2px;
                 padding: 4px 10px;
                 font-size: 11px;
                 font-weight: 500;
@@ -1608,12 +1608,12 @@ class MainWindow(QMainWindow):
                 background-color: {bg};
                 color: {fg};
                 border: 1px solid {border};
-                border-radius: 12px;
+                border-radius: 2px;
                 padding: 6px;
             }}
             QMenu::item {{
                 padding: 7px 22px;
-                border-radius: 6px;
+                border-radius: 2px;
                 font-size: 12.5px;
                 font-weight: 500;
             }}

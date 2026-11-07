@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRectF, QPointF, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QPixmap, QColor, QPainter, QPainterPath, QLinearGradient, QPen, QCursor
 from PyQt6.QtWidgets import (
     QFrame,
@@ -17,6 +17,7 @@ from wallhaven.installed import installed_manager
 from wallhaven.image_loader import loader
 from wallhaven.i18n import tr
 from wallhaven.widgets.shimmer import ShimmerLabel
+from wallhaven.animated_preview import AnimPlayer, HAS_AV
 
 
 class WallpaperCard(QFrame):
@@ -64,6 +65,14 @@ class WallpaperCard(QFrame):
         self._anim_blur: QPropertyAnimation | None = None
         self._anim_offset: QPropertyAnimation | None = None
 
+        # Animated (live wallpaper) hover preview
+        self._anim_player: AnimPlayer | None = None
+        self._anim_playing = False
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(280)
+        self._hover_timer.timeout.connect(self._start_live_preview)
+
         self._init_ui()
         self._load_thumbnail()
 
@@ -78,7 +87,7 @@ class WallpaperCard(QFrame):
         card_layout.setSpacing(6)
 
         # 1. Image preview with animated skeleton shimmer
-        self.image_label = ShimmerLabel(self, corner_radius=11)
+        self.image_label = ShimmerLabel(self, corner_radius=2)
         self.image_label.setFixedSize(self._img_w, self._img_h)
 
         # In-image overlay layout
@@ -92,14 +101,14 @@ class WallpaperCard(QFrame):
         top_badge_row.setSpacing(5)
 
         if getattr(self.item, "is_animated", False):
-            self.live_badge = QLabel("▶ LIVE")
+            self.live_badge = QLabel("[ ▶ LIVE ]")
             self.live_badge.setToolTip(tr("card_live_tooltip"))
             self.live_badge.setStyleSheet("""
                 QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(6, 182, 212, 0.92), stop:1 rgba(139, 92, 246, 0.92));
-                    color: #ffffff;
-                    border: 1px solid rgba(255, 255, 255, 0.32);
-                    border-radius: 6px;
+                    background: rgba(4, 12, 8, 0.88);
+                    color: #33ff77;
+                    border: 1px solid #33ff77;
+                    border-radius: 2px;
                     font-weight: 800;
                     font-size: 9.5px;
                     padding: 2px 7px;
@@ -113,10 +122,10 @@ class WallpaperCard(QFrame):
             self.inst_badge = QLabel(tr("card_installed_badge"))
             self.inst_badge.setStyleSheet("""
                 QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(5, 150, 105, 0.92), stop:1 rgba(16, 185, 129, 0.92));
-                    color: #ffffff;
-                    border: 1px solid rgba(52, 211, 153, 0.55);
-                    border-radius: 6px;
+                    background: rgba(4, 12, 8, 0.88);
+                    color: #7dffa8;
+                    border: 1px solid #2f7a4b;
+                    border-radius: 2px;
                     font-weight: 800;
                     font-size: 9px;
                     padding: 2px 6px;
@@ -131,11 +140,11 @@ class WallpaperCard(QFrame):
         is_2k = not is_4k and self.item.dimension_x >= 2560
 
         if is_4k:
-            res_text = "✨ 4K UHD"
+            res_text = "[4K]"
         elif is_2k:
-            res_text = "⚡ 2K QHD"
+            res_text = "[2K]"
         else:
-            res_text = self.item.resolution
+            res_text = f"[{self.item.resolution}]"
 
         self.res_badge = QLabel(res_text)
         self.res_badge.setToolTip(f"{self.item.resolution} • {self.item.ratio}")
@@ -144,7 +153,7 @@ class WallpaperCard(QFrame):
                 background-color: rgba(15, 15, 22, 0.88);
                 color: #fbbf24;
                 border: 1px solid rgba(251, 191, 36, 0.65);
-                border-radius: 6px;
+                border-radius: 2px;
                 padding: 2px 7px;
                 font-size: 10px;
                 font-weight: 800;
@@ -154,7 +163,7 @@ class WallpaperCard(QFrame):
                 background-color: rgba(15, 15, 22, 0.88);
                 color: #38bdf8;
                 border: 1px solid rgba(56, 189, 248, 0.65);
-                border-radius: 6px;
+                border-radius: 2px;
                 padding: 2px 7px;
                 font-size: 10px;
                 font-weight: 800;
@@ -164,7 +173,7 @@ class WallpaperCard(QFrame):
                 background-color: rgba(12, 15, 24, 0.85);
                 color: {text_pri};
                 border: 1px solid rgba(255, 255, 255, 0.16);
-                border-radius: 6px;
+                border-radius: 2px;
                 padding: 2px 6px;
                 font-size: 9.5px;
                 font-weight: 700;
@@ -181,7 +190,7 @@ class WallpaperCard(QFrame):
             QFrame#cardHoverBar {{
                 background-color: rgba(10, 12, 20, 0.78);
                 border: 1px solid {accent};
-                border-radius: 20px;
+                border-radius: 2px;
             }}
         """)
         self.hover_bar.setVisible(False)
@@ -277,7 +286,7 @@ class WallpaperCard(QFrame):
             purity_lbl.setStyleSheet("""
                 background: #d97706;
                 color: white;
-                border-radius: 4px;
+                border-radius: 2px;
                 font-weight: bold;
                 font-size: 9.5px;
                 padding: 1px 5px;
@@ -288,7 +297,7 @@ class WallpaperCard(QFrame):
             purity_lbl.setStyleSheet("""
                 background: #e11d48;
                 color: white;
-                border-radius: 4px;
+                border-radius: 2px;
                 font-weight: bold;
                 font-size: 9.5px;
                 padding: 1px 5px;
@@ -310,7 +319,7 @@ class WallpaperCard(QFrame):
                 dot.setStyleSheet(f"""
                     background-color: {c_str};
                     border: 1px solid rgba(255, 255, 255, 0.35);
-                    border-radius: 4px;
+                    border-radius: 2px;
                 """)
                 dots_wrap.addWidget(dot)
             info_row.addLayout(dots_wrap)
@@ -333,7 +342,7 @@ class WallpaperCard(QFrame):
                 background-color: rgba(20, 27, 45, 0.92);
                 color: #ffffff;
                 border: 1.5px solid rgba(255, 255, 255, 0.22);
-                border-radius: 16px;
+                border-radius: 2px;
                 font-size: 13px;
                 font-weight: bold;
                 padding: 0;
@@ -353,7 +362,7 @@ class WallpaperCard(QFrame):
         loader.load_thumbnail(
             self._thumb_url,
             target_size=target_size,
-            radius=11,
+            radius=2,
             callback=self._set_pixmap_instant
         )
 
@@ -364,34 +373,33 @@ class WallpaperCard(QFrame):
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         pal = get_palette(config.theme)
-        c1 = QColor(pal.get("accent_gradient_start", pal.get("accent", "#6366f1")))
-        c2 = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#a855f7")))
+        accent = QColor(pal.get("accent", "#33ff77"))
+        border = QColor(pal.get("border", "#1f4d2e"))
 
+        rect = QRectF(0.5, 0.5, float(self.width()) - 1.0, float(self.height()) - 1.0)
         if self._hovered:
-            c1.setAlpha(255)
-            c2.setAlpha(255)
-            pen_w = 2.5
+            painter.setPen(QPen(accent, 1.0))
+            painter.drawRect(rect)
+            # Terminal-style corner brackets
+            L = 12.0
+            painter.setPen(QPen(accent, 2.0))
+            x0, y0, x1, y1 = rect.left(), rect.top(), rect.right(), rect.bottom()
+            for (cx, cy, dx, dy) in ((x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)):
+                painter.drawLine(QPointF(cx, cy), QPointF(cx + dx * L, cy))
+                painter.drawLine(QPointF(cx, cy), QPointF(cx, cy + dy * L))
         else:
-            c1.setAlpha(115)
-            c2.setAlpha(95)
-            pen_w = 1.5
-
-        rect = QRectF(1.0, 1.0, float(self.width()) - 2.0, float(self.height()) - 2.0)
-        path = QPainterPath()
-        path.addRoundedRect(rect, 14.0, 14.0)
-        grad = QLinearGradient(0.0, 0.0, float(self.width()), float(self.height()))
-        grad.setColorAt(0.0, c1)
-        grad.setColorAt(1.0, c2)
-        pen = QPen(grad, pen_w)
-        painter.strokePath(path, pen)
+            painter.setPen(QPen(border, 1.0))
+            painter.drawRect(rect)
         painter.end()
 
     def enterEvent(self, event):
         super().enterEvent(event)
         self._hovered = True
         self.hover_bar.setVisible(True)
+        if getattr(self.item, "is_animated", False) and HAS_AV:
+            self._hover_timer.start()
 
         pal = get_palette(config.theme)
         glow_col = QColor(pal.get("accent_hover", pal.get("accent", "#6366f1")))
@@ -417,6 +425,7 @@ class WallpaperCard(QFrame):
         super().leaveEvent(event)
         self._hovered = False
         self.hover_bar.setVisible(False)
+        self._stop_live_preview()
 
         self._anim_blur = QPropertyAnimation(self._shadow, b"blurRadius")
         self._anim_blur.setDuration(180)
@@ -433,7 +442,32 @@ class WallpaperCard(QFrame):
         self._anim_offset.start()
         self.update()
 
+    def _start_live_preview(self):
+        if not self._hovered or self._anim_playing:
+            return
+        if self._anim_player is None:
+            self._anim_player = AnimPlayer((self._img_w, self._img_h), cover=True, parent=self)
+            self._anim_player.frame.connect(self._on_live_frame)
+            self._anim_player.error.connect(lambda _e: self._stop_live_preview())
+        self._anim_playing = True
+        self._anim_player.start(item=self.item)
+
+    def _on_live_frame(self, img):
+        if not self._anim_playing:
+            return
+        self.image_label.set_loaded_pixmap(QPixmap.fromImage(img), animate=False)
+
+    def _stop_live_preview(self):
+        self._hover_timer.stop()
+        if self._anim_player is not None:
+            self._anim_player.stop()
+        if self._anim_playing:
+            self._anim_playing = False
+            if self._pixmap is not None:
+                self.image_label.set_loaded_pixmap(self._pixmap, animate=False)
+
     def _cleanup_loader(self):
+        self._stop_live_preview()
         if self._thumb_url:
             loader.unregister_callback(self._thumb_url, self._set_pixmap_instant)
 

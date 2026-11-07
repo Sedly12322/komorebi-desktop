@@ -15,6 +15,7 @@ from PyQt6.QtCore import (
     pyqtProperty,
     pyqtSignal,
     QSize,
+    QTimer,
 )
 from PyQt6.QtGui import (
     QPainter,
@@ -137,29 +138,29 @@ class SidebarNavItem(QPushButton):
         border_col = pal.get("border", "#232838")
 
         if self.is_active:
-            self.icon_lbl.setStyleSheet("""
-                font-size: 17px;
-                background-color: rgba(255, 255, 255, 0.20);
-                border: 1px solid rgba(255, 255, 255, 0.40);
-                border-radius: 10px;
+            self.icon_lbl.setStyleSheet(f"""
+                font-size: 16px;
+                background-color: {bg_cap};
+                border: 1px solid {accent};
+                border-radius: 2px;
             """)
             self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
                 font-weight: 800;
-                color: {accent_text};
+                color: {accent_hover};
                 background: transparent;
             """)
             self.subtitle_lbl.setStyleSheet(f"""
                 font-size: 10px;
                 font-weight: 600;
-                color: {accent_text};
+                color: {text_pri};
                 background: transparent;
             """)
             self.badge_lbl.setStyleSheet(f"""
-                background-color: rgba(255, 255, 255, 0.25);
+                background-color: {accent};
                 color: {accent_text};
-                border: 1px solid rgba(255, 255, 255, 0.42);
-                border-radius: 9px;
+                border: 1px solid {accent_hover};
+                border-radius: 2px;
                 padding: 2px 7px;
                 font-size: 9.5px;
                 font-weight: 900;
@@ -169,7 +170,7 @@ class SidebarNavItem(QPushButton):
                 font-size: 16px;
                 background-color: {bg_cap};
                 border: 1px solid {border_col};
-                border-radius: 10px;
+                border-radius: 2px;
             """)
             self.title_lbl.setStyleSheet(f"""
                 font-size: 12.5px;
@@ -187,7 +188,7 @@ class SidebarNavItem(QPushButton):
                 background-color: {bg_cap};
                 color: {accent_hover};
                 border: 1px solid {accent};
-                border-radius: 9px;
+                border-radius: 2px;
                 padding: 2px 7px;
                 font-size: 9.5px;
                 font-weight: 800;
@@ -197,7 +198,7 @@ class SidebarNavItem(QPushButton):
             QPushButton {
                 background: rgba(255, 255, 255, 0.015);
                 border: 1px solid rgba(255, 255, 255, 0.04);
-                border-radius: 12px;
+                border-radius: 2px;
                 text-align: left;
             }
             QPushButton:hover {
@@ -330,30 +331,14 @@ class SidebarNavContainer(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
-        # Draw glowing animated pill behind the active item
+        # Draw terminal selection block + left cursor bar behind the active item
         if self._indicator_rect.isValid() and self._indicator_rect.width() > 0:
             ir = self._indicator_rect
             pal = get_palette(config.theme)
-            c_start = QColor(pal.get("accent_gradient_start", pal.get("accent", "#4f46e5")))
-            c_end = QColor(pal.get("accent_gradient_end", pal.get("accent_hover", "#7c3aed")))
-            c_glow = QColor(pal.get("accent_hover", pal.get("accent", "#818cf8")))
-
-            # Outer neon halo layers
-            for expand, alpha in ((5.0, 32), (2.5, 68)):
-                halo_path = QPainterPath()
-                halo_path.addRoundedRect(
-                    float(ir.x()) - expand,
-                    float(ir.y()) - expand,
-                    float(ir.width()) + expand * 2,
-                    float(ir.height()) + expand * 2,
-                    13.0,
-                    13.0,
-                )
-                glow_col = QColor(c_glow)
-                glow_col.setAlpha(alpha)
-                painter.fillPath(halo_path, glow_col)
+            c_surf = QColor(pal.get("accent_surface", "#0f3a20"))
+            c_acc = QColor(pal.get("accent", "#33ff77"))
 
             pill_path = QPainterPath()
             pill_path.addRoundedRect(
@@ -361,24 +346,24 @@ class SidebarNavContainer(QWidget):
                 float(ir.y()),
                 float(ir.width()),
                 float(ir.height()),
-                12.0,
-                12.0,
+                2.0,
+                2.0,
             )
+            c_surf.setAlpha(235)
+            painter.fillPath(pill_path, c_surf)
 
-            c_start.setAlpha(248)
-            c_end.setAlpha(248)
-
-            grad = QLinearGradient(float(ir.x()), float(ir.y()), float(ir.x() + ir.width()), float(ir.y() + ir.height()))
-            grad.setColorAt(0.0, c_start)
-            grad.setColorAt(1.0, c_end)
-            painter.fillPath(pill_path, grad)
-
-            # Vivid neon edge highlight
-            sheen_color = QColor(c_glow).lighter(130)
-            sheen_color.setAlpha(210)
-            pen = QPen(sheen_color)
-            pen.setWidthF(1.6)
+            pen = QPen(c_acc)
+            pen.setWidthF(1.2)
             painter.strokePath(pill_path, pen)
+
+            # Solid terminal cursor bar on left edge (▌)
+            painter.fillRect(
+                int(ir.x()),
+                int(ir.y()),
+                4,
+                int(ir.height()),
+                c_acc,
+            )
 
         painter.end()
 
@@ -477,10 +462,12 @@ class KomorebiSidebar(QFrame):
         else:
             emblem_lbl.setText("🌿")
 
-        emblem_lbl.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(99, 102, 241, 0.28), stop:1 rgba(236, 72, 153, 0.25));
-            border: 1.5px solid rgba(129, 140, 248, 0.55);
-            border-radius: 11px;
+        self.emblem_lbl = emblem_lbl
+        _pal = get_palette(config.theme)
+        emblem_lbl.setStyleSheet(f"""
+            background: {_pal.get("bg_capsule", "#060a07")};
+            border: 1px solid {_pal.get("border_hover", "#2f7a4b")};
+            border-radius: 2px;
             padding: 3px;
         """)
         brand_layout.addWidget(emblem_lbl)
@@ -489,29 +476,38 @@ class KomorebiSidebar(QFrame):
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
 
-        brand_title = QLabel("KOMOREBI")
-        brand_title.setStyleSheet("""
-            font-size: 14.5px;
-            font-weight: 900;
-            color: #ffffff;
-            letter-spacing: 2.2px;
+        brand_title = QLabel("> komorebi_")
+        self.brand_title = brand_title
+        _acc = _pal.get("accent", "#33ff77")
+        brand_title.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: 800;
+            color: {_acc};
+            letter-spacing: 0.5px;
             background: transparent;
         """)
+        # Blinking terminal cursor
+        self._cursor_on = True
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.timeout.connect(self._blink_cursor)
+        self._cursor_timer.start(530)
         title_box.addWidget(brand_title)
 
         subtitle_row = QHBoxLayout()
         subtitle_row.setSpacing(5)
-        brand_sub = QLabel("NEON HUB")
-        brand_sub.setStyleSheet("font-size: 9.5px; color: #94a3b8; font-weight: 800; letter-spacing: 0.8px; background: transparent;")
+        brand_sub = QLabel("~/wallpapers $")
+        self.brand_sub = brand_sub
+        brand_sub.setStyleSheet(f"font-size: 9.5px; color: {_pal.get('text_secondary', '#7fb893')}; font-weight: 800; letter-spacing: 0.8px; background: transparent;")
         subtitle_row.addWidget(brand_sub)
 
         self.ver_badge = QLabel(f"v{__version__}")
         self.ver_badge.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.ver_badge.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.28);
-            border-radius: 5px;
+        _pal = get_palette(config.theme)
+        self.ver_badge.setStyleSheet(f"""
+            background: transparent;
+            color: {_pal.get("accent_hover", "#7dffa8")};
+            border: 1px solid {_pal.get("border_hover", "#2f7a4b")};
+            border-radius: 2px;
             padding: 1px 6px;
             font-size: 9px;
             font-weight: 900;
@@ -592,7 +588,7 @@ class KomorebiSidebar(QFrame):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #06b6d4);
                 color: #ffffff;
                 border: 1px solid rgba(255, 255, 255, 0.35);
-                border-radius: 5px;
+                border-radius: 2px;
                 padding: 1px 6px;
                 font-size: 9px;
                 font-weight: 900;
@@ -611,7 +607,7 @@ class KomorebiSidebar(QFrame):
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(5, 150, 105, 0.28), stop:1 rgba(16, 185, 129, 0.16));
                     color: #34d399;
                     border: 1px solid rgba(52, 211, 153, 0.5);
-                    border-radius: 9px;
+                    border-radius: 2px;
                     text-align: left;
                     padding-left: 10px;
                     font-size: 11.5px;
@@ -629,7 +625,7 @@ class KomorebiSidebar(QFrame):
                     background-color: transparent;
                     color: #94a3b8;
                     border: 1px solid transparent;
-                    border-radius: 9px;
+                    border-radius: 2px;
                     text-align: left;
                     padding-left: 10px;
                     font-size: 11.5px;
@@ -642,10 +638,17 @@ class KomorebiSidebar(QFrame):
                 }
             """)
 
+    def _blink_cursor(self):
+        self._cursor_on = not self._cursor_on
+        self.brand_title.setText("> komorebi_" if self._cursor_on else "> komorebi ")
+
     def update_theme_display(self, theme_id: str = ""):
         if not theme_id:
             theme_id = config.theme
         theme_names = {
+            "terminal": "Terminal",
+            "terminal_amber": "Amber CRT",
+            "terminal_ice": "Ice CRT",
             "matugen": "Matugen",
             "dark": "Wallhaven",
             "catppuccin": "Catppuccin",
@@ -664,6 +667,36 @@ class KomorebiSidebar(QFrame):
         short_name = theme_names.get(theme_id, theme_id.capitalize())
         theme_label = tr("theme_menu_title") or "Theme"
         self.theme_btn.setText(f"🎨  {theme_label}: {short_name}")
+        pal = get_palette(theme_id)
+        if hasattr(self, "brand_title"):
+            self.brand_title.setStyleSheet(f"""
+                font-size: 14px;
+                font-weight: 800;
+                color: {pal.get("accent", "#33ff77")};
+                letter-spacing: 0.5px;
+                background: transparent;
+            """)
+        if hasattr(self, "brand_sub"):
+            self.brand_sub.setStyleSheet(
+                f"font-size: 9.5px; color: {pal.get('text_secondary', '#7fb893')}; font-weight: 800; letter-spacing: 0.8px; background: transparent;"
+            )
+        if hasattr(self, "emblem_lbl"):
+            self.emblem_lbl.setStyleSheet(f"""
+                background: {pal.get("bg_capsule", "#060a07")};
+                border: 1px solid {pal.get("border_hover", "#2f7a4b")};
+                border-radius: 2px;
+                padding: 3px;
+            """)
+        if hasattr(self, "ver_badge") and not getattr(self, "_new_version", None):
+            self.ver_badge.setStyleSheet(f"""
+                background: transparent;
+                color: {pal.get("accent_hover", "#7dffa8")};
+                border: 1px solid {pal.get("border_hover", "#2f7a4b")};
+                border-radius: 2px;
+                padding: 1px 6px;
+                font-size: 9px;
+                font-weight: 900;
+            """)
         for btn in self.nav_container.buttons.values():
             btn._update_style()
         self._update_auto_wall_btn_style()

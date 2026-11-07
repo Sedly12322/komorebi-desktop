@@ -27,12 +27,7 @@ from wallhaven.wallpaper import get_available_monitors, set_desktop_wallpaper
 from wallhaven.i18n import tr, i18n
 from wallhaven.styles import get_palette
 
-try:
-    from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-    from PyQt6.QtMultimediaWidgets import QVideoWidget
-    HAS_MULTIMEDIA = True
-except ImportError:
-    HAS_MULTIMEDIA = False
+from wallhaven.animated_preview import AnimPlayer, HAS_AV
 
 
 class DetailFetchWorker(QThread):
@@ -325,8 +320,7 @@ class DetailDialog(QDialog):
         self._full_preview_url: str | None = None
         self._is_full_res_loaded: bool = False
         self._is_fullscreen_preview: bool = False
-        self.player: QMediaPlayer | None = None
-        self.audio_output: QAudioOutput | None = None
+        self.player: AnimPlayer | None = None
 
         self._update_window_title()
         self.resize(1120, 740)
@@ -369,6 +363,7 @@ class DetailDialog(QDialog):
         border = pal.get("border", "#232a3b")
         accent = pal.get("accent", "#6366f1")
         accent_hover = pal.get("accent_hover", "#818cf8")
+        accent_text = pal.get("accent_text", "#ffffff")
         text_pri = pal.get("text_primary", "#f8fafc")
         text_sec = pal.get("text_secondary", "#94a3b8")
 
@@ -383,7 +378,7 @@ class DetailDialog(QDialog):
             QFrame#previewContainer {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {pal.get('bg_base', '#090b10')}, stop:1 {bg_card});
                 border: 1.5px solid {border};
-                border-radius: 14px;
+                border-radius: 2px;
             }}
         """)
         preview_layout = QVBoxLayout(self.preview_container)
@@ -400,7 +395,7 @@ class DetailDialog(QDialog):
                 background: {bg_surface};
                 color: {text_pri};
                 border: 1px solid {border};
-                border-radius: 8px;
+                border-radius: 2px;
                 padding: 4px 10px;
                 font-size: 12px;
                 font-weight: 800;
@@ -408,7 +403,7 @@ class DetailDialog(QDialog):
             QPushButton:hover:enabled {{
                 background: {accent};
                 border-color: {accent_hover};
-                color: #ffffff;
+                color: {accent_text};
             }}
             QPushButton:disabled {{
                 color: #475569;
@@ -445,7 +440,7 @@ class DetailDialog(QDialog):
             background: rgba(16, 185, 129, 0.18);
             color: #34d399;
             border: 1px solid rgba(52, 211, 153, 0.45);
-            border-radius: 7px;
+            border-radius: 2px;
             padding: 3px 8px;
             font-size: 10.5px;
             font-weight: 800;
@@ -499,18 +494,19 @@ class DetailDialog(QDialog):
         self._update_zoom_controls_visibility()
         self.preview_stack.addWidget(self.preview_label)
 
-        # Page 1: Video player if multimedia available
-        if HAS_MULTIMEDIA:
+        # Page 1: Animated preview (frames decoded by PyAV - works with AV1/VP9/H.264 alike)
+        if HAS_AV:
             video_box = QWidget()
             v_layout = QVBoxLayout(video_box)
             v_layout.setContentsMargins(0, 0, 0, 0)
             v_layout.setSpacing(6)
 
-            self.video_widget = QVideoWidget()
-            self.video_widget.setStyleSheet("background-color: #000000; border-radius: 10px;")
-            v_layout.addWidget(self.video_widget, stretch=1)
+            self.anim_view = ZoomablePreviewWidget("")
+            self.anim_view.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.anim_view.setStyleSheet("background-color: #000000;")
+            v_layout.addWidget(self.anim_view, stretch=1)
 
-            # Video Controls Bar
+            # Playback Controls Bar
             controls = QHBoxLayout()
             controls.setContentsMargins(8, 0, 8, 8)
             controls.setSpacing(8)
@@ -521,12 +517,6 @@ class DetailDialog(QDialog):
             self.play_pause_btn.clicked.connect(self._toggle_playback)
             controls.addWidget(self.play_pause_btn)
 
-            self.mute_btn = QPushButton(tr("audio_muted"))
-            self.mute_btn.setFixedHeight(28)
-            self.mute_btn.setStyleSheet(nav_btn_style)
-            self.mute_btn.clicked.connect(self._toggle_mute)
-            controls.addWidget(self.mute_btn)
-
             controls.addStretch()
 
             self.live_tag = QLabel(tr("live_preview_loop"))
@@ -536,13 +526,9 @@ class DetailDialog(QDialog):
             v_layout.addLayout(controls)
             self.preview_stack.addWidget(video_box)
 
-            # Initialize QMediaPlayer
-            self.player = QMediaPlayer()
-            self.audio_output = QAudioOutput()
-            self.player.setAudioOutput(self.audio_output)
-            self.player.setVideoOutput(self.video_widget)
-            self.audio_output.setMuted(True)
-            self.player.setLoops(QMediaPlayer.Loops.Infinite)
+            self.player = AnimPlayer((1280, 720), cover=False, parent=self)
+            self.player.frame.connect(self._on_anim_frame)
+            self.player.error.connect(self._on_anim_error)
 
         self.main_layout.addWidget(self.preview_container, stretch=3)
 
@@ -577,14 +563,14 @@ class DetailDialog(QDialog):
                 background: {bg_surface};
                 color: {text_sec};
                 border: 1px solid {border};
-                border-radius: 6px;
+                border-radius: 2px;
                 font-size: 11px;
                 padding: 4px 8px;
                 font-weight: 600;
             }}
             QPushButton:hover {{
                 background: {accent};
-                color: #ffffff;
+                color: {accent_text};
                 border-color: {accent_hover};
             }}
         """)
@@ -601,7 +587,7 @@ class DetailDialog(QDialog):
                 background: {bg_card};
                 border: 1.5px solid {border};
                 border-top: 2px solid {accent};
-                border-radius: 12px;
+                border-radius: 2px;
             }}
         """)
         dl_layout = QVBoxLayout(self.dl_frame)
@@ -624,14 +610,14 @@ class DetailDialog(QDialog):
                 background: {bg_surface};
                 color: {text_pri};
                 border: 1px solid {border};
-                border-radius: 8px;
+                border-radius: 2px;
                 font-size: 12px;
                 font-weight: 700;
             }}
             QPushButton:hover {{
                 background: {accent};
                 border-color: {accent_hover};
-                color: #ffffff;
+                color: {accent_text};
             }}
         """)
         self.copy_img_btn.clicked.connect(self._on_copy_image_clicked)
@@ -649,7 +635,7 @@ class DetailDialog(QDialog):
             QCheckBox::indicator {{
                 width: 16px;
                 height: 16px;
-                border-radius: 4px;
+                border-radius: 2px;
                 border: 1px solid {border};
                 background: {bg_surface};
             }}
@@ -712,7 +698,7 @@ class DetailDialog(QDialog):
                 background-color: #450a0a;
                 color: #fca5a5;
                 border: 1px solid #dc2626;
-                border-radius: 8px;
+                border-radius: 2px;
                 font-weight: 600;
                 font-size: 12px;
                 padding: 6px 12px;
@@ -737,7 +723,7 @@ class DetailDialog(QDialog):
         self.meta_frame.setStyleSheet(f"""
             QFrame#metaFrame {{
                 background: {bg_card};
-                border-radius: 12px;
+                border-radius: 2px;
                 border: 1px solid {border};
             }}
         """)
@@ -778,7 +764,7 @@ class DetailDialog(QDialog):
         self.tags_frame.setStyleSheet(f"""
             QFrame#tagsFrame {{
                 background: {bg_card};
-                border-radius: 12px;
+                border-radius: 2px;
                 border: 1px solid {border};
             }}
         """)
@@ -840,15 +826,16 @@ class DetailDialog(QDialog):
         pal = get_palette(config.theme)
         accent = pal.get("accent", "#6366f1")
         accent_hover = pal.get("accent_hover", "#818cf8")
+        accent_text = pal.get("accent_text", "#ffffff")
         border = pal.get("border", "#232a3b")
         self.dl_btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 {accent_hover});
-                color: #ffffff;
+                color: {accent_text};
                 font-weight: bold;
                 font-size: 13px;
-                border: none;
-                border-radius: 8px;
+                border: 1px solid {accent_hover};
+                border-radius: 2px;
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent_hover}, stop:1 {accent});
@@ -924,7 +911,7 @@ class DetailDialog(QDialog):
             color_chip.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {c};
-                    border-radius: 6px;
+                    border-radius: 2px;
                     border: 1.5px solid rgba(255, 255, 255, 0.22);
                 }}
                 QPushButton:hover {{
@@ -1066,24 +1053,34 @@ class DetailDialog(QDialog):
         super().keyPressEvent(event)
 
     def _toggle_playback(self):
-        if not self.player:
+        if not self.player or not self.player.is_active():
             return
-        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+        if self.player.is_playing():
             self.player.pause()
             self.play_pause_btn.setText(tr("media_play"))
         else:
-            self.player.play()
+            self.player.resume()
             self.play_pause_btn.setText(tr("media_pause"))
 
-    def _toggle_mute(self):
-        if not self.audio_output:
+    def _start_animation(self, source: str = ""):
+        """Starts the looping animated preview (local file, preview URL, or resolved via item)."""
+        if not self.player:
             return
-        is_muted = self.audio_output.isMuted()
-        self.audio_output.setMuted(not is_muted)
-        if not is_muted:
-            self.mute_btn.setText(tr("audio_muted"))
-        else:
-            self.mute_btn.setText(tr("audio_unmuted"))
+        if hasattr(self, "play_pause_btn"):
+            self.play_pause_btn.setText(tr("media_pause"))
+        self.player.start(source=source, item=None if source else self.item)
+
+    def _on_anim_frame(self, img):
+        if not getattr(self.item, "is_animated", False):
+            return
+        self.anim_view.set_source_pixmap(QPixmap.fromImage(img), preserve_zoom=True)
+        if self.preview_stack.currentIndex() != 1:
+            self.preview_stack.setCurrentIndex(1)
+
+    def _on_anim_error(self, message: str):
+        # Fall back to the static thumbnail if the animation cannot be played
+        print(f"Animated preview unavailable: {message}")
+        self.preview_stack.setCurrentIndex(0)
 
     def retranslate_ui(self):
         self._update_window_title()
@@ -1119,15 +1116,10 @@ class DetailDialog(QDialog):
         if hasattr(self, "live_tag") and self.live_tag:
             self.live_tag.setText(tr("live_preview_loop"))
         if hasattr(self, "play_pause_btn") and self.play_pause_btn:
-            if hasattr(self, "player") and self.player and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            if self.player and self.player.is_playing():
                 self.play_pause_btn.setText(tr("media_pause"))
             else:
                 self.play_pause_btn.setText(tr("media_play"))
-        if hasattr(self, "mute_btn") and self.mute_btn:
-            if hasattr(self, "audio_output") and self.audio_output and not self.audio_output.isMuted():
-                self.mute_btn.setText(tr("audio_unmuted"))
-            else:
-                self.mute_btn.setText(tr("audio_muted"))
 
         if hasattr(self, "colors_title_lbl") and self.colors_title_lbl:
             self.colors_title_lbl.setText(tr("meta_palette"))
@@ -1287,11 +1279,9 @@ class DetailDialog(QDialog):
             self._request_full_res_preview()
 
         # If animated wallpaper and has preview video URL, switch to video view!
-        if HAS_MULTIMEDIA and getattr(full_item, "is_animated", False) and full_item.preview_video_url and self.player:
+        if getattr(full_item, "is_animated", False) and self.player and not self.player.is_active():
             try:
-                self.player.setSource(QUrl(full_item.preview_video_url))
-                self.player.play()
-                self.preview_stack.setCurrentIndex(1)
+                self._start_animation(full_item.preview_video_url)
             except Exception as e:
                 print(f"Error starting video preview: {e}")
 
@@ -1316,7 +1306,7 @@ class DetailDialog(QDialog):
                         background: {bg_surface};
                         color: {accent_hover};
                         border: 1px solid {border};
-                        border-radius: 6px;
+                        border-radius: 2px;
                         padding: 4px 8px;
                         font-size: 11px;
                         text-align: left;
@@ -1410,7 +1400,7 @@ class DetailDialog(QDialog):
                 font-weight: bold;
                 font-size: 13px;
                 border: 1px solid #10b981;
-                border-radius: 8px;
+                border-radius: 2px;
             }
             QPushButton:hover {
                 background-color: #047857;
@@ -1471,17 +1461,15 @@ class DetailDialog(QDialog):
                         font-weight: bold;
                         font-size: 13px;
                         border: 1px solid #10b981;
-                        border-radius: 8px;
+                        border-radius: 2px;
                     }
                 """)
                 self.dl_status_lbl.setText(tr("download_status_saved", filename=os.path.basename(installed_path)))
                 self.dl_status_lbl.setStyleSheet("color: #34d399; font-size: 12px;")
                 self.dl_status_lbl.setVisible(True)
-                if HAS_MULTIMEDIA and getattr(self.item, "is_animated", False) and self.player:
+                if getattr(self.item, "is_animated", False) and self.player:
                     try:
-                        self.player.setSource(QUrl.fromLocalFile(installed_path))
-                        self.player.play()
-                        self.preview_stack.setCurrentIndex(1)
+                        self._start_animation(installed_path)
                     except Exception as e:
                         print(f"Error starting local video preview: {e}")
         except Exception as e:

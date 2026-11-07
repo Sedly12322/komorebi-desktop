@@ -178,52 +178,13 @@ class KomorebiAmbientCanvas(QWidget):
         top_glow.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
         painter.fillRect(QRectF(0.0, 0.0, w, top_glow_h), top_glow)
 
-        # 3. Ambient Mesh Orbs (Gentle floating aurora with breathing pulse)
-        orb_alpha = 26 if is_oled else (20 if is_light else 52)
-        sec_alpha = 20 if is_oled else (16 if is_light else 42)
-
-        # Breathing pulsation factor (~7 second cycle)
-        breath1 = 0.85 + 0.15 * math.sin(t * 0.5)
-        breath2 = 0.85 + 0.15 * math.cos(t * 0.4)
-
-        # Orb 1: Upper-right quadrant drifting
-        ox1 = w * 0.72 + math.sin(t * 0.35) * (w * 0.12)
-        oy1 = h * 0.22 + math.cos(t * 0.28) * (h * 0.10)
-        r1 = max(260.0, min(w, h) * 0.60)
-        a1 = int(orb_alpha * breath1)
-
-        grad1 = QRadialGradient(ox1, oy1, r1)
-        grad1.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), a1))
-        grad1.setColorAt(0.35, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(a1 * 0.60)))
-        grad1.setColorAt(0.70, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(a1 * 0.18)))
-        grad1.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
-        painter.fillRect(self.rect(), grad1)
-
-        # Orb 2: Lower-left quadrant drifting with secondary hue
-        ox2 = w * 0.22 + math.cos(t * 0.30) * (w * 0.10)
-        oy2 = h * 0.78 + math.sin(t * 0.40) * (h * 0.12)
-        r2 = max(220.0, min(w, h) * 0.50)
-        a2 = int(sec_alpha * breath2)
-
-        grad2 = QRadialGradient(ox2, oy2, r2)
-        grad2.setColorAt(0.0, QColor(sec_col.red(), sec_col.green(), sec_col.blue(), a2))
-        grad2.setColorAt(0.40, QColor(sec_col.red(), sec_col.green(), sec_col.blue(), int(a2 * 0.55)))
-        grad2.setColorAt(0.75, QColor(sec_col.red(), sec_col.green(), sec_col.blue(), int(a2 * 0.15)))
-        grad2.setColorAt(1.0, QColor(sec_col.red(), sec_col.green(), sec_col.blue(), 0))
-        painter.fillRect(self.rect(), grad2)
-
-        # Orb 3: Subtle central breathing light
-        cx = w * 0.50 + math.sin(t * 0.22) * (w * 0.08)
-        cy = h * 0.50 + math.cos(t * 0.25) * (h * 0.08)
-        r3 = max(180.0, min(w, h) * 0.38)
-        pulse = (math.sin(t * 0.6) + 1.0) * 0.5  # 0.0 to 1.0
-        c3_alpha = int((10 if is_oled else (12 if is_light else 20)) + pulse * 10)
-
-        grad3 = QRadialGradient(cx, cy, r3)
-        grad3.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), c3_alpha))
-        grad3.setColorAt(0.50, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(c3_alpha * 0.35)))
-        grad3.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
-        painter.fillRect(self.rect(), grad3)
+        # 3. CRT phosphor bloom (very faint, breathing)
+        pulse = (math.sin(t * 0.6) + 1.0) * 0.5
+        bloom_alpha = int((6 if is_light else 14) + pulse * 8)
+        bloom = QRadialGradient(w * 0.5, h * 0.45, max(w, h) * 0.55)
+        bloom.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), bloom_alpha))
+        bloom.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
+        painter.fillRect(self.rect(), bloom)
 
         # 4. Perimeter Radial Vignette (Soft edge fading)
         if not is_oled:
@@ -244,39 +205,19 @@ class KomorebiAmbientCanvas(QWidget):
         bot_fade.setColorAt(1.0, QColor(0, 0, 0, bot_alpha))
         painter.fillRect(QRectF(0.0, h - bot_fade_h, w, bot_fade_h), bot_fade)
 
-        # 6. Micro-dot Grid (Subtle Linear/Raycast tech matrix)
-        dot_spacing = 32
-        dot_col = QColor(255, 255, 255, 9 if is_oled else (12 if not is_light else 8))
-        if is_light:
-            dot_col = QColor(0, 0, 0, 10)
-        painter.setPen(dot_col)
-        pts: List[QPointF] = []
-        for x in range(dot_spacing // 2, int(w), dot_spacing):
-            for y in range(dot_spacing // 2, int(h), dot_spacing):
-                pts.append(QPointF(float(x), float(y)))
-        if pts:
-            painter.drawPoints(pts)
+        # 6. Terminal scanlines (1px dark line every 3px)
+        scan_col = QColor(0, 0, 0, 34 if not is_light else 12)
+        painter.setPen(scan_col)
+        for y in range(0, int(h), 3):
+            painter.drawLine(0, y, int(w), y)
 
-        # 7. Floating Komorebi Light Motes (Dappled Sunlight Particles)
-        self._ensure_motes()
-        for mote in self._motes:
-            # Alpha breathing
-            alpha_wave = (math.sin(t * mote.sway_speed * 1.5 + mote.phase) + 1.0) * 0.5
-            cur_alpha = int(mote.base_alpha * (0.6 + 0.4 * alpha_wave))
-            cur_alpha = max(10, min(140, cur_alpha))
-
-            # Outer soft glow halo
-            halo_r = mote.radius * 2.2
-            halo_grad = QRadialGradient(mote.x, mote.y, halo_r)
-            halo_grad.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), int(cur_alpha * 0.6)))
-            halo_grad.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
-            painter.setBrush(halo_grad)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(QPointF(mote.x, mote.y), halo_r, halo_r)
-
-            # Core particle
-            core_col = QColor(255, 255, 255, cur_alpha) if not is_light else QColor(30, 30, 40, cur_alpha)
-            painter.setBrush(core_col)
-            painter.drawEllipse(QPointF(mote.x, mote.y), mote.radius, mote.radius)
+        # 7. Slow rolling scan band (old CRT refresh line)
+        band_h = 90.0
+        band_y = ((t * 38.0) % (h + band_h * 2)) - band_h
+        band = QLinearGradient(0.0, band_y, 0.0, band_y + band_h)
+        band.setColorAt(0.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
+        band.setColorAt(0.8, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 9 if not is_light else 4))
+        band.setColorAt(1.0, QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 0))
+        painter.fillRect(QRectF(0.0, band_y, w, band_h), band)
 
         painter.end()

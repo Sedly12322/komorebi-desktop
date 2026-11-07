@@ -43,11 +43,7 @@ def get_default_download_dir() -> Path:
 
 
 def get_default_theme() -> str:
-    if sys.platform != "win32":
-        serp = Path.home() / ".local/state/serpantinum" / "qs_colors.json"
-        if serp.exists():
-            return "matugen"
-    return "dark"
+    return "terminal"
 
 
 DEFAULT_CONFIG = {

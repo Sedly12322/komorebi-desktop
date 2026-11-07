@@ -727,7 +727,7 @@ class UpdateDialog(QDialog):
         icon_lbl.setStyleSheet("""
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(234, 179, 8, 0.2), stop:1 rgba(99, 102, 241, 0.25));
             border: 1px solid rgba(234, 179, 8, 0.4);
-            border-radius: 12px;
+            border-radius: 2px;
         """)
         header.addWidget(icon_lbl)
 
@@ -752,23 +752,23 @@ class UpdateDialog(QDialog):
             font-size: 11px;
             font-weight: 700;
             padding: 2px 8px;
-            border-radius: 6px;
+            border-radius: 2px;
         """)
         self.ver_row.addWidget(cur_badge)
 
         self.arrow_lbl = QLabel("➔")
-        self.arrow_lbl.setStyleSheet("color: #6366f1; font-weight: 900; font-size: 12px;")
+        self.arrow_lbl.setStyleSheet(f"color: {pal.get('accent', '#33ff77')}; font-weight: 900; font-size: 12px;")
         self.arrow_lbl.setVisible(self.info.has_update)
         self.ver_row.addWidget(self.arrow_lbl)
 
         self.new_badge = QLabel(f"{new_v}")
-        self.new_badge.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
-            color: #ffffff;
+        self.new_badge.setStyleSheet(f"""
+            background: {pal.get('accent', '#33ff77')};
+            color: {pal.get('accent_text', '#04120a')};
             font-size: 11px;
             font-weight: 800;
             padding: 2px 10px;
-            border-radius: 6px;
+            border-radius: 2px;
         """)
         self.new_badge.setVisible(self.info.has_update)
         self.ver_row.addWidget(self.new_badge)
@@ -805,7 +805,7 @@ class UpdateDialog(QDialog):
                 background-color: #0b0e14;
                 color: #e2e8f0;
                 border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 8px;
+                border-radius: 2px;
                 padding: 10px;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 font-size: 12px;
@@ -833,16 +833,16 @@ class UpdateDialog(QDialog):
         self.prog_bar.setValue(0)
         self.prog_bar.setFixedHeight(12)
         self.prog_bar.setTextVisible(False)
-        self.prog_bar.setStyleSheet("""
-            QProgressBar {
+        self.prog_bar.setStyleSheet(f"""
+            QProgressBar {{
                 background-color: rgba(255, 255, 255, 0.08);
                 border: none;
-                border-radius: 6px;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #06b6d4);
-                border-radius: 6px;
-            }
+                border-radius: 2px;
+            }}
+            QProgressBar::chunk {{
+                background: {pal.get('accent', '#33ff77')};
+                border-radius: 2px;
+            }}
         """)
         prog_layout.addWidget(self.prog_bar)
         self.progress_container.setVisible(False)
@@ -860,7 +860,7 @@ class UpdateDialog(QDialog):
                 background-color: rgba(255, 255, 255, 0.06);
                 color: #94a3b8;
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
+                border-radius: 2px;
                 padding: 7px 14px;
                 font-size: 12px;
                 font-weight: 600;
@@ -884,23 +884,23 @@ class UpdateDialog(QDialog):
         self.apply_btn = QPushButton(tr("update_btn_apply"))
         self.apply_btn.setObjectName("primaryButton")
         self.apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.apply_btn.setStyleSheet("""
-            QPushButton#primaryButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #6366f1);
-                color: #ffffff;
-                border: none;
-                border-radius: 8px;
+        self.apply_btn.setStyleSheet(f"""
+            QPushButton#primaryButton {{
+                background: {pal.get('accent', '#33ff77')};
+                color: {pal.get('accent_text', '#04120a')};
+                border: 1px solid {pal.get('accent_hover', '#7dffa8')};
+                border-radius: 2px;
                 padding: 7px 18px;
                 font-size: 12.5px;
                 font-weight: 700;
-            }
-            QPushButton#primaryButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #4f46e5);
-            }
-            QPushButton#primaryButton:disabled {
+            }}
+            QPushButton#primaryButton:hover {{
+                background: {pal.get('accent_hover', '#7dffa8')};
+            }}
+            QPushButton#primaryButton:disabled {{
                 background: #334155;
                 color: #64748b;
-            }
+            }}
         """)
         self.apply_btn.clicked.connect(self._start_update)
         # No "reinstall/force" path: installing a non-newer release would downgrade the app.
@@ -1006,7 +1006,7 @@ class UpdateDialog(QDialog):
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #10b981);
                     color: #ffffff;
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 2px;
                     padding: 7px 18px;
                     font-size: 12.5px;
                     font-weight: 800;
@@ -1072,19 +1072,20 @@ class UpdateBanner(QFrame):
 
         self.action_btn = QPushButton(tr("update_banner_apply"))
         self.action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.action_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4f46e5, stop:1 #7c3aed);
-                color: #ffffff;
-                border: none;
-                border-radius: 7px;
+        _bpal = get_palette(config.theme)
+        self.action_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {_bpal.get('accent', '#33ff77')};
+                color: {_bpal.get('accent_text', '#04120a')};
+                border: 1px solid {_bpal.get('accent_hover', '#7dffa8')};
+                border-radius: 2px;
                 padding: 5px 14px;
                 font-size: 11.5px;
                 font-weight: 800;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4338ca, stop:1 #6d28d9);
-            }
+            }}
+            QPushButton:hover {{
+                background: {_bpal.get('accent_hover', '#7dffa8')};
+            }}
         """)
         self.action_btn.clicked.connect(self._on_action_clicked)
         layout.addWidget(self.action_btn)
@@ -1098,7 +1099,7 @@ class UpdateBanner(QFrame):
                 background-color: rgba(255, 255, 255, 0.1);
                 color: #e2e8f0;
                 border: none;
-                border-radius: 12px;
+                border-radius: 2px;
                 font-size: 11px;
                 font-weight: bold;
                 padding: 0px;
@@ -1117,7 +1118,7 @@ class UpdateBanner(QFrame):
             QFrame#updateBanner {
                 background-color: rgba(15, 23, 42, 0.95);
                 border: 1px solid rgba(99, 102, 241, 0.4);
-                border-radius: 10px;
+                border-radius: 2px;
             }
         """)
 

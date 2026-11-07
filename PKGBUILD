@@ -11,6 +11,7 @@ depends=(
     'python'
     'python-pyqt6'
     'python-requests'
+    'python-av'
     'python-pillow'
 )
 makedepends=(

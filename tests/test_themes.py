@@ -120,3 +120,21 @@ def test_multi_monitor_detection_and_placeholder(monkeypatch):
     assert "-o" in cmd_dp1 and "DP-1" in cmd_dp1
 
 
+
+
+def test_terminal_palettes_and_anim_helpers(tmp_path):
+    from wallhaven.styles import THEME_PALETTES
+    from wallhaven.animated_preview import _DecodeThread, ensure_local_video, resolve_animated_source
+
+    assert "terminal" in THEME_PALETTES
+    t = _DecodeThread("x", (284, 172), cover=True)
+    w, h = t._target_size(1280, 720)
+    assert w >= 284 and h >= 172 and w % 2 == 0 and h % 2 == 0
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    assert ensure_local_video(str(f)) == str(f)
+
+    class It:
+        local_path = str(f)
+
+    assert resolve_animated_source(It()) == str(f)

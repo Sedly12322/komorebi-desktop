@@ -23,6 +23,7 @@ classifiers = [
 dependencies = [
   "PyQt6>=6.6.0",
   "requests>=2.31.0",
+  "av>=12.0.0",
   "pillow>=10.0.0",
 ]
 

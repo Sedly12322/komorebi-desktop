@@ -27,7 +27,7 @@ pip install -r requirements.txt pyinstaller
 
 echo.
 echo [2/3] Kompiluji standalone executable pres PyInstaller...
-pyinstaller --noconsole --onefile --clean --icon=assets/icon.ico --add-data="assets;assets" --add-data="wallhaven/data;wallhaven/data" --collect-all PyQt6 --name="Komorebi-Desktop" main.py
+pyinstaller --noconsole --onefile --clean --icon=assets/icon.ico --add-data="assets;assets" --add-data="wallhaven/data;wallhaven/data" --collect-all PyQt6 --collect-all av --name="Komorebi-Desktop" main.py
 
 if %errorlevel% neq 0 (
     echo [CHYBA] PyInstaller sestaveni selhalo.

@@ -85,6 +85,7 @@ class PfpDetailDialog(QDialog):
         border = pal.get("border", "#283045")
         accent = pal.get("accent", "#6366f1")
         accent_hover = pal.get("accent_hover", "#818cf8")
+        accent_text = pal.get("accent_text", "#ffffff")
         text_pri = pal.get("text_primary", "#f8fafc")
         text_sec = pal.get("text_secondary", "#94a3b8")
 
@@ -107,7 +108,7 @@ class PfpDetailDialog(QDialog):
             background: {bg_surface};
             color: {accent_hover};
             border: 1px solid {border};
-            border-radius: 6px;
+            border-radius: 2px;
             font-size: 11px;
             font-weight: 700;
             padding: 4px 8px;
@@ -122,7 +123,7 @@ class PfpDetailDialog(QDialog):
                 background: {bg_surface};
                 color: {text_sec};
                 border: 1px solid {border};
-                border-radius: 8px;
+                border-radius: 2px;
                 font-weight: bold;
                 font-size: 13px;
             }}
@@ -146,7 +147,7 @@ class PfpDetailDialog(QDialog):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {bg_base}, stop:1 {bg_card});
                 border: 1.5px solid {border};
                 border-top: 2px solid {accent};
-                border-radius: 16px;
+                border-radius: 2px;
             }}
         """)
         preview_layout = QVBoxLayout(self.preview_frame)
@@ -209,10 +210,11 @@ class PfpDetailDialog(QDialog):
         self.set_avatar_btn.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent}, stop:1 {accent_hover});
-                color: #ffffff;
+                color: {accent_text};
                 font-size: 13px;
                 font-weight: bold;
-                border-radius: 9px;
+                border: 1px solid {accent_hover};
+                border-radius: 2px;
                 padding: 0 16px;
             }}
             QPushButton:hover {{
@@ -234,13 +236,13 @@ class PfpDetailDialog(QDialog):
                 font-size: 13px;
                 font-weight: bold;
                 border: 1.5px solid {border};
-                border-radius: 9px;
+                border-radius: 2px;
                 padding: 0 14px;
             }}
             QPushButton:hover {{
                 background: {accent};
                 border-color: {accent_hover};
-                color: #ffffff;
+                color: {accent_text};
             }}
         """)
         self.copy_btn.clicked.connect(self._on_copy_clipboard)
@@ -258,7 +260,7 @@ class PfpDetailDialog(QDialog):
                 font-size: 13px;
                 font-weight: bold;
                 border: 1.5px solid {border};
-                border-radius: 9px;
+                border-radius: 2px;
                 padding: 0 14px;
             }}
             QPushButton:hover {{
@@ -342,7 +344,7 @@ class PfpDetailDialog(QDialog):
         ok, msg = pfps_client.set_system_avatar(self.item, self._local_file)
         if ok:
             self.set_avatar_btn.setText(tr("pfp_avatar_set"))
-            self.set_avatar_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
+            self.set_avatar_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 2px;")
             QMessageBox.information(self, tr("pfp_avatar_changed_title"), msg)
         else:
             QMessageBox.warning(self, tr("pfp_avatar_error_title"), msg)
@@ -355,7 +357,7 @@ class PfpDetailDialog(QDialog):
                 dest_path = dest_dir / self.item.filename
                 shutil.copyfile(self._local_file, dest_path)
                 self.download_btn.setText(tr("pfp_downloaded"))
-                self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
+                self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 2px;")
                 QMessageBox.information(
                     self,
                     tr("pfp_avatar_saved_title"),
@@ -368,7 +370,7 @@ class PfpDetailDialog(QDialog):
         ok, path_or_err = pfps_client.download_pfp(self.item)
         if ok:
             self.download_btn.setText(tr("pfp_downloaded"))
-            self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 9px;")
+            self.download_btn.setStyleSheet("background: #059669; color: #fff; font-weight: bold; border-radius: 2px;")
             QMessageBox.information(
                 self,
                 tr("pfp_avatar_saved_title"),
