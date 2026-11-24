@@ -1,228 +1,196 @@
-# 🌿 Komorebi Desktop
+# 🌿 Komorebi Desktop *(v3.0.0 — Rust Rewrite)*
 *(formerly Wallhaven Desktop)*
 
 <div align="center">
 
-[![Arch Linux](https://img.shields.io/badge/Arch%20Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)](https://archlinux.org)
+[![Rust](https://img.shields.io/badge/Rust-2021-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![GUI](https://img.shields.io/badge/GUI-egui%20%2F%20eframe%20(glow)-38bdf8?style=for-the-badge)](https://github.com/emilk/egui)
+[![Arch Linux](https://img.shields.io/badge/Arch%20Linux-Hyprland%20%2F%20Wayland-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)](https://archlinux.org)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Sedly12322/komorebi-desktop/releases)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://riverbankcomputing.com/software/pyqt/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
-[![GitHub Release](https://img.shields.io/github/v/release/Sedly12322/komorebi-desktop?style=for-the-badge&logo=github)](https://github.com/Sedly12322/komorebi-desktop/releases)
 [![GitHub stars](https://img.shields.io/github/stars/Sedly12322/komorebi-desktop?style=for-the-badge&logo=github&color=gold)](https://github.com/Sedly12322/komorebi-desktop/stargazers)
 
-**A modern, ultra-fast desktop wallpaper and avatar browser, downloader, and manager powered by Python & PyQt6.**  
-Seamlessly integrates **Wallhaven.cc**, **MoeWalls (Live Video 4K/60FPS)**, **osu! Seasonal Art**, and **pfps.gg (Avatars & Animated GIFs)**.  
-Fully optimized for **Linux** (Arch Linux / Hyprland / Quickshell / Serpantinum / Wayland / X11) and **Microsoft Windows 10 & 11**.
+**An ultra-fast, native desktop wallpaper and avatar browser, downloader, and manager written in Rust using GPU-accelerated `egui` / `eframe`.**  
+Integrates **Wallhaven.cc**, **MoeWalls (Live Video Wallpapers)**, **osu! Seasonal Art**, **pfps.gg (Avatars & Animated GIFs)**, and your **Local Wallpaper Library**.
 
 </div>
 
 ---
 
-## 📥 Installation
+## ⚡ Why Rust (`v3.0.0` on `rust-rewrite`)
 
-### 🐧 Arch Linux & Linux Distributions
+- **Single Native Binary:** Compiled with release LTO & symbol stripping (~20 MB binary) — zero Python/Qt runtime overhead and instant startup.
+- **GPU-Accelerated Immediate-Mode UI:** Smooth scrolling and crisp typography (`NotoSans` + automatic `JetBrainsMonoNerdFont` monospace switching for Terminal themes) rendered with `eframe` + `glow`.
+- **Non-Blocking Background Architecture:** Network requests (`reqwest` + `rustls-tls`), `rayon` 6-thread parallel image/GIF decoding, `ffmpeg` video previews, local disk indexing, and `hyprctl` monitor detection all run off the UI thread.
+- **Wayland / Hyprland First-Class Citizen:** Non-blocking buffer swaps on Linux (`vsync: false` for composited Wayland) with focus-aware animations, preventing hidden-workspace hangs and CPU spin.
+- **Zero-Data-Loss Migration:** Fully compatible with existing `~/.config/komorebi-desktop/{config.json,installed.json}` schemas from `v2.x` (preserving extra/unknown JSON keys).
 
-Choose any of the following convenient installation methods:
+---
 
-#### ⚡ Method 1: Quick Install Script (Recommended)
+## 📦 Requirements
 
-Clone the repository and run the installer script. It installs the application, dependencies, icons, desktop entry, and commands to `~/.local/bin` without requiring `sudo`:
+### Build Dependencies
+- **Rust toolchain** (`cargo` and `rustc` via `rustup` or system packages)
+- **OpenGL libraries** (`libgl` / Mesa drivers for GPU `glow` backend)
+
+### Optional Runtime Tools
+| Tool | Purpose |
+| :--- | :--- |
+| `ffmpeg` + `ffprobe` | Live video wallpaper playback (`VideoPreviewPlayer`), looping card hover previews, and local video thumbnail extraction |
+| `mpvpaper` | Live/animated `.mp4`/`.webm` desktop wallpapers on Wayland (Hyprland / wlroots) |
+| `awww` / `swww` / `hyprpaper` / `swaybg` / `waypaper` | Static & animated image wallpaper backends on Wayland |
+| `wl-copy` | Persistent clipboard image copy on Wayland sessions (with `arboard` fallback) |
+| `mpv` | External video preview window via the **Open in MPV** button |
+
+---
+
+## 📥 Installation & Usage
+
+### 🐧 Linux (Arch Linux / Hyprland / Wayland / X11)
+
+#### ⚡ Quick Install (Recommended)
+Compiles the optimized release binary and installs to `~/.local/share/komorebi-desktop` with symlinks in `~/.local/bin` and a `.desktop` launcher entry (no `sudo` needed):
 
 ```bash
-git clone https://github.com/Sedly12322/komorebi-desktop.git
+git clone -b rust-rewrite https://github.com/Sedly12322/komorebi-desktop.git
 cd komorebi-desktop
 ./install.sh
 ```
 
-Launch the app from anywhere via terminal:
+Launch from anywhere:
 ```bash
 komorebi
 # or:
 komorebi-desktop
-# (wallhaven and wallhaven-desktop are also preserved as backward-compatible aliases)
-```
-Or launch it from your application launcher (**Rofi**, **Wofi**, **Hyprland menu**, **KDE Application Launcher**, **GNOME**).
-
----
-
-#### 📦 Method 2: Native Arch Package (`makepkg`)
-
-If you prefer managing packages natively via `pacman` and `makepkg`:
-
-```bash
-git clone https://github.com/Sedly12322/komorebi-desktop.git
-cd komorebi-desktop
-makepkg -si
+# (backward-compatible symlinks: wallhaven, wallhaven-desktop)
 ```
 
----
-
-#### 🐍 Method 3: Via `pipx`
-
+#### 🚀 Run Directly from Source
 ```bash
-pipx install git+https://github.com/Sedly12322/komorebi-desktop.git
-```
-
----
-
-#### 🚀 Method 4: Run from Source (No installation)
-
-```bash
-git clone https://github.com/Sedly12322/komorebi-desktop.git
-cd komorebi-desktop
 ./run.sh
+# or directly via Cargo:
+cargo run --release
 ```
 
----
+#### 🧪 Build & Run Unit Tests
+```bash
+cargo test
+cargo build --release
+```
 
-### 🪟 Microsoft Windows (10 / 11)
-
-Ready-to-use binaries are available on the [**GitHub Releases**](https://github.com/Sedly12322/komorebi-desktop/releases) page:
-
-1. **Installer (`.exe`):** Download and run **`Komorebi-Desktop-Setup.exe`** (or `Wallhaven-Desktop-Setup.exe`).  
-   *Installs the application and creates Start Menu & Desktop shortcuts, complete with an uninstaller.*
-2. **Portable Version (`.zip`):** Download **`Komorebi-Desktop-Portable.zip`** (or `Wallhaven-Desktop-Portable.zip`), extract anywhere, and run `Komorebi-Desktop.exe` directly without installing.
-
-*(Alternatively, run from source by double-clicking **`run.bat`**).*
-
----
-
-## 🔄 Updates & In-App Updater
-
-### ✨ In-App One-Click Updater
-Komorebi Desktop features a built-in update manager:
-- **Automatic Check on Startup:** Quietly checks GitHub Releases in the background when launched.
-- **Floating Update Banner:** Displays a sleek glassmorphic banner when a new release is available.
-- **Interactive Version Badge:** Click the version badge (`v...`) in the top-left sidebar to check for updates anytime.
-- **One-Click Install & Restart:** Downloads the update archive or installer, replaces files, updates dependencies, and restarts the application seamlessly.
-- **Settings Dialog Integration:** Manually check for updates, read the full changelog, or toggle automatic update checks.
-
-### 🐧 Manual Terminal Update (Linux)
-To update an existing installation to the latest commit:
+#### 🔄 Updating an Existing Install
 ```bash
 cd komorebi-desktop
 git pull
 ./install.sh
 ```
-*(All your settings, API keys, and downloaded wallpapers are automatically preserved).*
+*(Your `config.json`, `installed.json`, API keys, and downloaded wallpapers are untouched.)*
 
-If installed via `makepkg`:
-```bash
+### 🪟 Windows (10 / 11)
+Install the Rust toolchain (MSVC or GNU target) and build/run directly:
+```powershell
+git clone -b rust-rewrite https://github.com/Sedly12322/komorebi-desktop.git
 cd komorebi-desktop
-git pull
-makepkg -si
+cargo build --release
+.\target\release\komorebi-desktop.exe
 ```
-
-### 🪟 Windows Manual Update
-- **Installer Version (`.exe`):** Download the latest setup executable from [**GitHub Releases**](https://github.com/Sedly12322/komorebi-desktop/releases/latest) and run it. It updates the existing installation in-place.
-- **Portable Version (`.zip`):** Download the latest portable `.zip` and extract it to your folder.
 
 ---
 
 ## ✨ Features
 
-- **🎨 Ultra-Modern Multi-Theme Engine:**
-  - Curated themes: **Wallhaven Dark**, **Catppuccin Mocha**, **Tokyo Night**, **Nord Frost**, **Dracula**, **Gruvbox Dark**, **Cyberpunk 2077**, **OLED Pure Black**, and **Matugen / Pywal** dynamic desktop palette synchronization.
-  - Quick theme switcher in the bottom sidebar and settings modal.
+- **🎨 15 Curated Themes + Dynamic Desktop Sync:**
+  - **Terminal CRT Series** *(automatic monospace typography)*: `terminal` (Hacker CRT), `terminal_amber` (Amber Phosphor), `terminal_ice` (Ice CRT).
+  - **Curated Themes:** `dark` (Wallhaven Dark), `catppuccin`, `tokyo_night`, `nord`, `dracula`, `gruvbox`, `cyberpunk`, `oled` (OLED Pure Black), `rose_pine`, `everforest`, `kanagawa`, `synthwave`.
+  - **Dynamic System Sync:** Auto hot-reloading integration for **Matugen** (`~/.cache/quickshell/matugen.json`, `~/.local/state/serpantinum/qs_colors.json`, `~/.config/matugen/colors.json`), **GTK 3/4**, **KDE Plasma** (`~/.config/kdeglobals`), and **Pywal** (`~/.cache/wal/colors.json`).
+  - Live theme preview inside Settings with automatic rollback on Cancel/Escape.
 
-- **🌌 Ambient Dynamic Background Effects:**
-  - Ambient particle system with floating particles and animated multi-colored aurora glow.
-  - Can be toggled on/off in Settings for maximum performance.
+- **🌌 Ambient Komorebi Canvas:**
+  - Subtle atmospheric top glow, soft breathing center bloom, and gently drifting light motes that pause automatically when unfocused and can be toggled in Settings.
 
-- **🧭 Modern Navigation Sidebar & Spotlight Search:**
-  - Grouped navigation (*Explore* & *Library*) with an animated sliding indicator pill.
-  - **Spotlight Search Bar:** Quick search with `Ctrl+K` or `/` hotkeys.
-  - Floating pill pagination with instant page-jump popover.
+- **🖼️ Wallhaven.cc:**
+  - Spotlight search (`Ctrl+K` or `/`), categories (*General*, *Anime*, *People*), purity (*SFW*, *Sketchy*, *NSFW* with API key check), sorting (*Toplist*, *Hot*, *Latest*, *Views*, *Favorites*, *Random*, *Relevance*), toplist time ranges, aspect ratios, minimum resolutions, and a collapsible 18-color Wallhaven palette bar.
+  - Resolution badges (`[4K]` gold, `[2K]` cyan, `[WxH]`), card palette swatches, favorite/view counters, `[INSTALLED]` status badges, clickable modal color chips/tags, and scroll-to-zoom / drag-pan preview.
 
-- **🎬 MoeWalls (Live / Animated Video Wallpapers):**
-  - Dedicated tab featuring **20,000+ high-definition 2K / 4K 60FPS animated video wallpapers** from MoeWalls.
-  - **Embedded Video Player:** Live preview loop in the detail dialog powered by QtMultimedia & FFmpeg with Play/Pause and Mute toggles.
-  - **Direct MP4 Downloads:** Download pristine high-bitrate MP4 files with real-time download progress.
-  - **Category, Resolution & Keyword Filtering:** Filter by resolution (**4K UHD 3840×2160**, **2K QHD 2560×1440**, **1080p FHD**, **Ultrawide 21:9 3440×1440**, **Super Ultrawide 32:9 5120×1440**, **Dual 4K 7680×2160**, **720p HD**), category (Anime, Games, Sci-Fi, Fantasy, Landscape, Pixel Art, Animals, Vehicles, Movies, etc.), and full-text search.
-  - **Automatic Desktop Setup:** Seamlessly sets video wallpapers using Quickshell, `mpvpaper`, or custom commands.
+- **🎬 MoeWalls (Live Video Wallpapers):**
+  - Search and filter live video wallpapers by category and resolution (*4K UHD*, *2K QHD*, *1080p FHD*, *21:9 Ultrawide*, *32:9 Superwide*, *Dual 4K*, *720p HD*).
+  - **Card Hover Live Preview:** Hovering any animated card starts a smooth `ffmpeg` RGBA preview stream (`440×260` @ 24 fps) after a `0.25s` debounce and cleans up immediately when unfocused or closed.
+  - **Detail Modal Video Player:** Looping video playback with Play/Pause toggle, **Open in MPV**, and direct MP4 downloads with cancelable streaming progress bar.
 
-- **🖼️ Comprehensive Linux & Windows Wallpaper Setting:**
-  - Automatically sets downloaded wallpapers to your desktop background with zero hassle.
-  - **Hyprland / Wayland with Quickshell:** Full native support for Quickshell IPC (`serpantinum` and `illogical-impulse`), setting both static images and live video (`.mp4`) wallpapers directly.
-  - **Wayland Setters:** Native support for `mpvpaper` (animated video wallpapers), `swww`, `hyprpaper`, `waypaper`, and `swaybg`.
-  - **KDE Plasma 5 & 6:** Built-in support via `plasma-apply-wallpaperimage`.
-  - **GNOME / Cinnamon / MATE / XFCE:** Native integration via `gsettings` (supporting both light and dark theme background settings) and `xfconf-query`.
-  - **X11 Window Managers:** Native support for `feh`, `nitrogen`, and `xwinwrap` + `mpv` for video backgrounds.
-  - **Windows 10/11:** Native Windows API (`SystemParametersInfoW`) for static images and Lively Wallpaper CLI integration for animated video wallpapers (`.mp4`).
-  - **Configurable in Settings:** Choose auto-detection or select your preferred setter from a dropdown, test it with one click, or define custom command lines with `{file}`.
-  - Toggle on/off anytime using the **`🖼️ Auto Wallpaper`** button in the sidebar.
+- **🎯 osu! Seasonal Artworks (Offline Embedded):**
+  - **271 embedded official osu! seasonal contest artworks** bundled directly in the binary (`assets/osu_seasonal.json`) for instant zero-latency offline browsing.
+  - Filter by **Season**, **Theme** (*Spring*, *Summer*, *Autumn*, *Winter*, *Halloween*), **No Logo** toggle, and sort by *Winners (Votes)*, *Newest*, or *Contest Rank*.
 
-- **🎯 osu! Seasonal Wallpapers (Official Contest Art):**
-  - Dedicated tab featuring **1,699+ official seasonal contest wallpapers** directly from osu! fanart competitions (2020–2026).
-  - Works offline instantly with zero API keys or authentication required.
-  - **Filter by Season:** Spring 2026, Winter 2025, Halloween 2025, Summer 2025, and all past contests.
-  - **Theme Chips:** 🌸 Spring, ☀️ Summer, 🍂 Autumn, ❄️ Winter, and 🎃 Halloween.
-  - **Sorting:** 🏆 Top Voted (Official Contest Winners), 🕒 Newest Season, and 🎲 Random.
-  - Search by artist username, illustration title, or season name.
-  - Full metadata with artist credits, vote counts, winner badges, and direct links to official contest pages.
+- **🎭 pfps.gg (Avatars & Animated GIFs):**
+  - Browse and search profile pictures by category (*Anime*, *Animated GIFs*, *Aesthetic*, *Gaming*, *Cute*, *Meme*, *Dark*, *Matching*, etc.) and sorting (*Latest*, *Most Downloaded*, *Oldest*).
+  - Animated GIF playback on both grid cards and modal preview.
+  - **1-Click System Avatar:** Writes `~/.face` & `~/.face.icon` (auto-converting GIF/WebP first frame to PNG for lockscreens/DM compatibility) and updates Serpantinum config if present.
+  - **Clipboard Copy & Download:** Copies images persistently on Wayland via `wl-copy` (`arboard` fallback) or downloads to `~/Pictures/Komorebi/Avatars`.
 
-- **🎭 Avatars & Profile Pictures (pfps.gg Integration):**
-  - Dedicated **`🎭 PFPs`** tab featuring tens of thousands of aesthetic avatars and animated GIFs from [pfps.gg](https://pfps.gg).
-  - **Category Browsing:** Anime, Animated GIF, Aesthetic, Gaming, Cute, Meme, Dark, Matching, Cool, Pixel Art, Discord, etc.
-  - **Sorting:** Top Rated, Most Downloaded, Newest.
-  - **Keyword Search:** Instant full-text search across pfps.gg avatars.
-  - **👤 1-Click System Avatar Setter:**
-    - On Linux: Sets any avatar directly as your user avatar (`~/.face`, `~/.face.icon`) and Serpantinum shell config (`~/.config/serpantinum/settings.json`).
-    - On Windows: Sets user account picture in `%APPDATA%\Microsoft\Windows\AccountPictures` and `~/Pictures/Avatars`.
-  - **📋 Quick Clipboard Copy:** Instantly copy avatar image to clipboard with one click — paste directly into Discord, Telegram, or any chat with `Ctrl+V`.
-  - **💾 Download to Local Folder:** Download avatars to `~/Pictures/Avatars/`.
-  - **Asynchronous Asset Loading:** Fast dialog opening with pre-cached thumbnail while high-resolution media and animated GIFs stream smoothly in the background.
+- **💾 Installed Library & Local Scanner:**
+  - Automatically indexes wallpapers from your download directory (`image_dimensions` + `ffprobe` for videos) alongside `installed.json`.
+  - Filter by provider (*Wallhaven*, *MoeWalls*, *osu!*, *Local*), media type (*Images* / *Video*), and sort by *Newest*, *Name*, or *File Size*.
+  - Live storage summary, **Open Folder**, 1-click **Set as Wallpaper**, and **Uninstall**.
 
-- **💾 Installed Wallpapers & Uninstallation:**
-  - Dedicated **`💾 Installed`** tab managing all wallpapers downloaded across all providers (**Wallhaven**, **MoeWalls**, and **osu! Seasonal**).
-  - Automatically catalogs and syncs existing wallpapers from your wallpaper directory with offline support.
-  - **Filter by Provider:** All, Wallhaven, MoeWalls Live, osu! Seasonal.
-  - **Filter by Type:** Static Images or Animated Video Wallpapers.
-  - **Sorting:** Newest first, Oldest first, Name (A-Z), and File Size.
-  - **Disk Usage Stats:** Live summary of installed wallpapers and total disk usage (e.g. `156 wallpapers • 436.5 MB`).
-  - **🗑️ Complete Uninstallation:** Safely uninstall and delete wallpapers from your system directly from card buttons or the detail dialog with confirmation.
-  - **🖼️ Quick Desktop Setter:** Set any installed wallpaper to your desktop with one click without downloading again.
-  - **📁 Open in Folder:** One-click button to reveal wallpapers in your system file manager.
+- **🖥️ Multi-Monitor & Wallpaper Setter Support:**
+  - Detects active displays via `hyprctl monitors -j` or `xrandr --query`.
+  - **Linux:** `~/.config/hypr/scripts/set-wallpaper.sh`, `awww`, `swww`, `mpvpaper` (`-vs -o "no-audio --loop" '*'`), Quickshell (`qs ipc`), `waypaper`, `hyprpaper`, `swaybg`, KDE `plasma-apply-wallpaperimage`, GNOME `gsettings`, XFCE `xfconf-query`, `feh`, `nitrogen`, `xwinwrap`, plus custom `{file}` / `{monitor}` commands.
+  - **Windows:** Native `SystemParametersInfo` (static) and **Lively Wallpaper** CLI (video), plus custom commands.
 
-- **🔍 Advanced Search & Filtering (Wallhaven):**
-  - **Full-text Query:** Search by keywords, `@uploader`, or `#tags`.
-  - **Categories:** Toggle *General*, *Anime*, and *People*.
-  - **Purity:** *SFW*, *Sketchy*, and *NSFW* (with API key check and configuration prompt).
-  - **Sorting:** *Toplist*, *Hot*, *Latest (Date Added)*, *Views*, *Favorites*, *Random*, and *Relevance*.
-  - **Toplist Time Range:** 1 day, 3 days, 1 week, 1 month, 3 months, 1 year.
-  - **Aspect Ratios:** Any, 16:9, 16:10, 21:9 Ultrawide, 32:9 Superwide, 9:16 Mobile/Portrait.
-  - **Resolutions:** Any, 1080p, 1440p (2K), 4K UHD, 8K UHD.
-  - **Color Palette (🎨 Colors):** Filter wallpapers by dominant color using 18 official Wallhaven shades.
+- **🌐 Localization & Updates:**
+  - Instant UI switching between **English** and **Czech (Čeština)**.
+  - Optional background GitHub Releases check (`Sedly12322/komorebi-desktop`) with notification pill in the sidebar and manual check inside Settings.
 
-- **🌐 Multi-Language / Localization:**
-  - Full support for **English** (default) and **Czech (Čeština)**.
-  - Automatically detects system locale on startup.
-  - Switch languages on the fly in **Settings (⚙)** with instant UI update without restarting.
+---
 
-- **⚙️ Settings & Configuration:**
-  - Store your Wallhaven API key to unlock NSFW wallpapers and your personal collections.
-  - Configure default download directory.
-  - In-app update checker and auto-check toggle.
-  - Custom wallpaper command support (with `{file}` placeholder).
-  - Inspect thumbnail cache size and purge cache with one click.
+## ⌨️ Keyboard Shortcuts & Controls
+
+| Shortcut / Action | Behavior |
+| :--- | :--- |
+| `Ctrl+K` or `/` | Focus Spotlight search bar |
+| `←` / `→` | Navigate Previous / Next wallpaper while Detail Modal is open |
+| `Esc` | Close active popup/modal (or close page-jump popover) |
+| Mouse Wheel (in Detail) | Zoom static wallpaper (`100%` – `500%`) |
+| Drag / Double-Click (in Detail) | Pan zoomed image / Reset zoom to fit |
+
+---
+
+## 📁 Configuration, Cache & Project Structure
+
+- **User Config & Library Manifest:** `~/.config/komorebi-desktop/{config.json,installed.json}`
+- **Disk Cache (750 MB max, 400 MB anim loop cache):** `~/.cache/komorebi-desktop/{thumbnails,previews,anim}`
+
+```text
+komorebi-desktop/
+├── Cargo.toml
+├── assets/                 # App icons, emblems, and embedded osu_seasonal.json
+├── src/
+│   ├── main.rs             # Window bootstrap, fonts, Linux vsync config
+│   ├── app.rs              # Async workers, hover video previews, state management
+│   ├── config.rs           # AppConfig (v2.x backward-compatible)
+│   ├── models.rs           # WallpaperItem, PfpItem, CardSize, NavMode
+│   ├── theme.rs            # 15 curated themes + Matugen/GTK/KDE/Pywal hot-reload
+│   ├── i18n.rs             # EN / CS translations
+│   ├── cache.rs            # rayon parallel loader, LRU GPU textures, disk cache
+│   ├── video_preview.rs    # Non-blocking ffmpeg/ffprobe streaming RGBA player
+│   ├── installed.rs        # Local manifest & folder scanner
+│   ├── wallpaper.rs        # Wayland / X11 / Windows setters & monitor detection
+│   ├── updater.rs          # GitHub Releases semver check
+│   ├── providers/          # wallhaven.rs, moewalls.rs, osu.rs, pfps.rs, mod.rs
+│   └── ui/                 # sidebar, filters, grid, detail_modal, pfp_modal, settings_modal, pagination, toast, ambient
+├── install.sh              # Build release & install to ~/.local
+├── run.sh                  # cargo run --release wrapper
+└── uninstall.sh            # Remove installed binaries, icons, and .desktop files
+```
 
 ---
 
 ## 🗑️ Uninstallation
 
-If installed via `./install.sh`:
 ```bash
 ./uninstall.sh
 ```
-
-If installed via `makepkg -si`:
-```bash
-sudo pacman -R komorebi-desktop-git
-```
-
-If installed on Windows:
-- Run the uninstaller from Windows **Settings → Apps → Installed apps**, or launch `unins000.exe` in the application directory.
+*(Removes `~/.local/share/komorebi-desktop`, symlinks in `~/.local/bin`, desktop entries, and icons while keeping your `~/.config/komorebi-desktop` config and downloaded wallpapers.)*
 
 ---
 
