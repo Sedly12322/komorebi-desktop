@@ -1,13 +1,13 @@
-# Virtual environment
-.venv
+# Rust build artifacts
+/target/
+target/
+
+# Virtual environment & Python leftovers
 .venv/
 env/
 venv/
-
-# Python cache
 __pycache__/
 *.py[cod]
-*$py.class
 
 # Temporary and download files
 *.download
@@ -22,9 +22,3 @@ __pycache__/
 .idea/
 *.swp
 *~
-
-# Build artifacts
-dist/
-build/
-*.spec
-

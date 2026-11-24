@@ -23,35 +23,30 @@ echo -e "Instaluji do: ${YELLOW}$INSTALL_DIR${NC}"
 
 mkdir -p "$INSTALL_DIR" "$BIN_DIR" "$APP_DIR" "$ICON_DIR"
 
-# Copy application files
-cp -r "$SRC_DIR/wallhaven" "$INSTALL_DIR/"
-cp -r "$SRC_DIR/assets" "$INSTALL_DIR/"
-cp "$SRC_DIR/main.py" "$INSTALL_DIR/"
-cp "$SRC_DIR/requirements.txt" "$INSTALL_DIR/"
-cp "$SRC_DIR/LICENSE" "$INSTALL_DIR/" 2>/dev/null || true
-
-# Setup virtual environment
-echo -e "Nastavuji Python prostředí..."
-if [ ! -d "$INSTALL_DIR/.venv" ]; then
-    python3 -m venv "$INSTALL_DIR/.venv"
+# Build release binary with Cargo
+if ! command -v cargo >/dev/null 2>&1; then
+    echo -e "${RED}Chyba: cargo není nainstalováno! Nainstalujte Rust toolchain (rustup / cargo).${NC}"
+    exit 1
 fi
 
-"$INSTALL_DIR/.venv/bin/pip" install --upgrade pip --quiet
-"$INSTALL_DIR/.venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" --quiet
+echo -e "Sestavuji nativní Rust binárku (--release)..."
+cargo build --release --manifest-path "$SRC_DIR/Cargo.toml"
+
+# Copy application files & compiled binary
+mkdir -p "$INSTALL_DIR/assets"
+cp "$SRC_DIR/target/release/komorebi-desktop" "$INSTALL_DIR/komorebi-desktop"
+chmod +x "$INSTALL_DIR/komorebi-desktop"
+cp -r "$SRC_DIR/assets/." "$INSTALL_DIR/assets/"
+cp "$SRC_DIR/LICENSE" "$INSTALL_DIR/" 2>/dev/null || true
 
 # Install icon
 cp "$SRC_DIR/assets/icon.png" "$ICON_DIR/komorebi.png"
 cp "$SRC_DIR/assets/icon.png" "$ICON_DIR/komorebi-desktop.png"
 cp "$SRC_DIR/assets/icon.png" "$ICON_DIR/wallhaven-desktop.png"
 
-# Create launcher script
-rm -f "$BIN_DIR/komorebi-desktop" "$BIN_DIR/wallhaven-desktop"
-cat > "$BIN_DIR/komorebi-desktop" << 'EOF'
-#!/usr/bin/env bash
-INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/komorebi-desktop"
-exec "$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/main.py" "$@"
-EOF
-chmod +x "$BIN_DIR/komorebi-desktop"
+# Create primary binary symlink
+rm -f "$BIN_DIR/komorebi-desktop" "$BIN_DIR/wallhaven-desktop" "$BIN_DIR/komorebi" "$BIN_DIR/wallhaven"
+ln -sf "$INSTALL_DIR/komorebi-desktop" "$BIN_DIR/komorebi-desktop"
 
 # Symlinks for convenience and backwards compatibility
 ln -sf "$BIN_DIR/komorebi-desktop" "$BIN_DIR/komorebi"
